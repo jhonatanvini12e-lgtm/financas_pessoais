@@ -4,9 +4,9 @@ import db from '../db/index.js';
 const router = express.Router();
 
 // `balance` e o saldo inicial informado na criacao da conta; o saldo atual
-// soma os lancamentos (manuais, import de extrato, sync Open Finance) feitos
-// depois, entao calculamos aqui em vez de depender de algo escrever de volta
-// em accounts.balance a cada lancamento.
+// soma os lancamentos (manuais ou import de extrato/fatura) feitos depois,
+// entao calculamos aqui em vez de depender de algo escrever de volta em
+// accounts.balance a cada lancamento.
 router.get('/', (req, res) => {
     res.json(
         db

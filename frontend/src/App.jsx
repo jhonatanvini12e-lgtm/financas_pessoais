@@ -4,7 +4,7 @@ import Layout from './components/Layout.jsx';
 import Login from './pages/Login.jsx';
 import Dashboard from './pages/Dashboard.jsx';
 import Accounts from './pages/Accounts.jsx';
-import BankConnections from './pages/BankConnections.jsx';
+import InvoiceExport from './pages/InvoiceExport.jsx';
 import OfxImportWizard from './pages/OfxImportWizard.jsx';
 import Transactions from './pages/Transactions.jsx';
 import QuickAdd from './pages/QuickAdd.jsx';
@@ -29,7 +29,7 @@ function App() {
             <Route element={<Layout />}>
                 <Route path="/" element={<Dashboard />} />
                 <Route path="/accounts" element={<Accounts />} />
-                <Route path="/banks" element={<BankConnections />} />
+                <Route path="/invoice-export" element={<InvoiceExport />} />
                 <Route path="/ofx-import" element={<OfxImportWizard />} />
                 <Route path="/transactions" element={<Transactions />} />
                 <Route path="/categories" element={<Categories />} />
@@ -38,6 +38,7 @@ function App() {
                 <Route path="/caixinhas-investimentos" element={<CaixinhasInvestimentos />} />
                 <Route path="/envelopes" element={<Navigate to="/caixinhas-investimentos" replace />} />
                 <Route path="/investments" element={<Navigate to="/caixinhas-investimentos" replace />} />
+                <Route path="/banks" element={<Navigate to="/invoice-export" replace />} />
                 <Route path="/turning-point" element={<TurningPoint />} />
                 <Route path="/intelligence" element={<Intelligence />} />
                 <Route path="/alerts" element={<Alerts />} />

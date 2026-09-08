@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../api/client.js';
+import PdfPasswordModal from '../components/PdfPasswordModal.jsx';
 
 export default function OfxImportWizard() {
     const [step, setStep] = useState(1);
@@ -12,6 +13,8 @@ export default function OfxImportWizard() {
     const [result, setResult] = useState(null);
     const [error, setError] = useState('');
     const [loading, setLoading] = useState(false);
+    const [pdfPasswordError, setPdfPasswordError] = useState('');
+    const [needsPdfPassword, setNeedsPdfPassword] = useState(false);
 
     useEffect(() => {
         api.get('/accounts').then(setAccounts).catch(() => {});
@@ -20,20 +23,31 @@ export default function OfxImportWizard() {
 
     const options = destinationType === 'account' ? accounts : cards;
 
-    const runImport = async () => {
+    const runImport = async (pdfPassword) => {
         setLoading(true);
         setError('');
+        if (pdfPassword !== undefined) setPdfPasswordError('');
         try {
             const formData = new FormData();
             formData.append('file', file);
             if (destinationType === 'account') formData.append('account_id', destinationId);
             else formData.append('card_id', destinationId);
+            if (pdfPassword) formData.append('password', pdfPassword);
 
             const data = await api.postForm('/transactions/import-statement', formData);
+            setNeedsPdfPassword(false);
             setResult(data);
             setStep(4);
         } catch (err) {
-            setError(err.message);
+            if (err.code === 'PDF_PASSWORD_REQUIRED' || err.code === 'PDF_PASSWORD_INCORRECT') {
+                setNeedsPdfPassword(true);
+                // So mostra a mensagem de erro no popup quando ja houve uma
+                // tentativa de senha (o primeiro popup, quando ainda nem se
+                // sabia que o PDF tinha senha, deve abrir "limpo").
+                setPdfPasswordError(err.code === 'PDF_PASSWORD_INCORRECT' ? err.message : '');
+            } else {
+                setError(err.message);
+            }
         } finally {
             setLoading(false);
         }
@@ -42,7 +56,7 @@ export default function OfxImportWizard() {
     return (
         <div className="page">
             <h1>Assistente de Importacao de Extratos</h1>
-            <p className="muted">Use este assistente quando a sincronizacao via Open Finance falhar. Formatos aceitos: .ofx, .csv, .xlsx e .pdf.</p>
+            <p className="muted">Nao ha sincronizacao automatica com bancos: use este assistente para importar extratos e faturas manualmente. Formatos aceitos: .ofx, .csv, .xlsx e .pdf.</p>
 
             <div className="wizard-steps">
                 <span className={step >= 1 ? 'active' : ''}>1. Destino</span>
@@ -104,7 +118,7 @@ export default function OfxImportWizard() {
                         {error && <div className="error-msg">{error}</div>}
                         <div className="wizard-actions">
                             <button className="btn-link" onClick={() => setStep(2)}>Voltar</button>
-                            <button className="btn-primary" disabled={loading} onClick={runImport}>
+                            <button className="btn-primary" disabled={loading} onClick={() => runImport()}>
                                 {loading ? 'Importando...' : 'Importar'}
                             </button>
                         </div>
@@ -126,6 +140,15 @@ export default function OfxImportWizard() {
                     </>
                 )}
             </section>
+
+            {needsPdfPassword && (
+                <PdfPasswordModal
+                    error={pdfPasswordError}
+                    loading={loading}
+                    onSubmit={(password) => runImport(password)}
+                    onCancel={() => { setNeedsPdfPassword(false); setPdfPasswordError(''); setLoading(false); }}
+                />
+            )}
         </div>
     );
 }

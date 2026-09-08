@@ -82,27 +82,6 @@ CREATE TABLE IF NOT EXISTS transactions (
     FOREIGN KEY(category_id) REFERENCES categories(id)
 );
 
-CREATE TABLE IF NOT EXISTS bank_connections (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    user_id INTEGER NOT NULL,
-    provider TEXT NOT NULL,
-    status TEXT DEFAULT 'DISCONNECTED',
-    last_sync_at DATETIME,
-    last_error TEXT,
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY(user_id) REFERENCES users(id),
-    UNIQUE(user_id, provider)
-);
-
-CREATE TABLE IF NOT EXISTS sync_logs (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    connection_id INTEGER NOT NULL,
-    status TEXT NOT NULL,
-    message TEXT,
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY(connection_id) REFERENCES bank_connections(id)
-);
-
 CREATE TABLE IF NOT EXISTS ofx_imports (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     user_id INTEGER NOT NULL,

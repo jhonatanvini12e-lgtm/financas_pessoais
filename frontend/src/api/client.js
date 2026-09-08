@@ -33,7 +33,9 @@ async function request(path, { method = 'GET', body, isForm = false } = {}) {
     }
 
     if (!res.ok) {
-        throw new Error(data?.error || `Erro na requisicao (${res.status})`);
+        const error = new Error(data?.error || `Erro na requisicao (${res.status})`);
+        if (data?.code) error.code = data.code;
+        throw error;
     }
 
     return data;

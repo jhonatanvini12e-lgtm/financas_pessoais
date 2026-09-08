@@ -1,5 +1,5 @@
 import { PDFParse } from 'pdf-parse';
-import { normalizeDate, parseAmount, extractInstallmentInfo } from './columnMapper.js';
+import { normalizeDate, parseAmount, extractInstallmentInfo, resolveInstallmentDate } from './columnMapper.js';
 
 // Extratos de cartao em PDF nao tem estrutura tabular (ao contrario de
 // CSV/XLSX), entao nao da pra usar a mesma heuristica de colunas. Em vez
@@ -34,7 +34,7 @@ Regras:
 - "date": data do lancamento no formato ISO YYYY-MM-DD. Se so houver dia/mes, assuma o ano do extrato (procure no cabecalho/periodo do documento).
 - "amount": numero (nao string), com ponto decimal. Compras, saques, tarifas, juros e demais debitos devem ser NEGATIVOS. Pagamentos recebidos, estornos e creditos devem ser POSITIVOS.
 ${categoryInstruction}
-- Se o lancamento for uma compra parcelada, o extrato normalmente indica isso com um contador tipo "3/10", "03/10" ou "PARC 3/10" dentro do proprio texto do lancamento. Mantenha esse contador dentro de "description" exatamente como aparece (nao remova nem reescreva).
+- Se o lancamento for uma compra parcelada, o extrato normalmente indica isso com um contador dentro do proprio texto do lancamento, em formatos como "3/10", "03/10", "PARC 3/10" ou por extenso "(Parcela 03 de 07)". Mantenha esse contador dentro de "description" exatamente como aparece (nao remova nem reescreva).
 - Ignore linhas que nao sao lancamentos individuais: cabecalhos, rodapes, numero de pagina, "saldo anterior", "total da fatura", limites de credito, propaganda, instrucoes.
 - Nao invente lancamentos que nao estao no texto.
 - Se nao conseguir identificar nenhum lancamento, devolva [].
@@ -74,11 +74,31 @@ function assertAnyApiKey() {
     }
 }
 
-async function extractText(buffer) {
-    const parser = new PDFParse({ data: buffer });
+// pdf-parse (via pdfjs-dist) sinaliza PDF protegido por senha lancando uma
+// PasswordException cuja causa original (pdfjs) carrega um `.code`: 1 quando
+// nenhuma senha foi informada, 2 quando a senha informada esta errada. Sem
+// isso o front nao teria como diferenciar "precisa de senha" de "senha
+// incorreta" -- ambos chegariam como um erro generico.
+const PDF_PASSWORD_NEEDED = 1;
+const PDF_PASSWORD_INCORRECT = 2;
+
+async function extractText(buffer, password) {
+    const parser = new PDFParse({ data: buffer, password: password || undefined });
     try {
         const result = await parser.getText();
         return (result.text || '').trim();
+    } catch (err) {
+        if (err.name === 'PasswordException') {
+            const code = err.cause?.code;
+            const wrapped = new Error(
+                code === PDF_PASSWORD_INCORRECT
+                    ? 'Senha incorreta. Tente novamente.'
+                    : 'Este PDF esta protegido por senha.'
+            );
+            wrapped.code = code === PDF_PASSWORD_INCORRECT ? 'PDF_PASSWORD_INCORRECT' : 'PDF_PASSWORD_REQUIRED';
+            throw wrapped;
+        }
+        throw err;
     } finally {
         await parser.destroy?.();
     }
@@ -220,8 +240,8 @@ async function askAIForTransactions(statementText, categoryNames) {
     }
 }
 
-export async function parsePdf(buffer, categoryNames = []) {
-    const text = await extractText(buffer);
+export async function parsePdf(buffer, categoryNames = [], password) {
+    const text = await extractText(buffer, password);
     if (!text) {
         throw new Error('Nao foi possivel extrair texto do PDF (arquivo pode ser uma imagem escaneada).');
     }
@@ -234,7 +254,7 @@ export async function parsePdf(buffer, categoryNames = []) {
             const installment = extractInstallmentInfo(rawDescription);
             const categorySuggestion = String(item.category ?? '').trim();
             return {
-                date: normalizeDate(item.date),
+                date: resolveInstallmentDate(normalizeDate(item.date), installment),
                 description: installment ? installment.cleanDescription : rawDescription,
                 amount: parseAmount(item.amount),
                 installmentNumber: installment?.number ?? null,

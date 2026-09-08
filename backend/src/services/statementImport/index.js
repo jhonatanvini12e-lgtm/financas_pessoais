@@ -17,7 +17,7 @@ function syntheticFitid(txn, sourceTag) {
 // `categoryNames` so e usado no caminho do PDF: e a lista de categorias do
 // usuario que a IA usa para sugerir uma categoria por lancamento com base na
 // descricao (ver statementImport/pdfParser.js).
-export async function parseStatementFile(originalFilename, buffer, categoryNames = []) {
+export async function parseStatementFile(originalFilename, buffer, categoryNames = [], password) {
     const ext = `.${(originalFilename.split('.').pop() || '').toLowerCase()}`;
 
     if (ext === '.ofx') {
@@ -30,7 +30,7 @@ export async function parseStatementFile(originalFilename, buffer, categoryNames
         return parseXlsx(buffer).map((txn) => ({ ...txn, fitid: syntheticFitid(txn, 'XLSX') }));
     }
     if (ext === '.pdf') {
-        const txns = await parsePdf(buffer, categoryNames);
+        const txns = await parsePdf(buffer, categoryNames, password);
         return txns.map((txn) => ({ ...txn, fitid: syntheticFitid(txn, 'PDF') }));
     }
 

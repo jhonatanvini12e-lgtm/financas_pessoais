@@ -13,8 +13,6 @@ const DEFAULT_CATEGORIES = [
     { name: 'Gastos Imprevistos', type: 'EXPENSE', keywords: '', budget_limit: 0 },
 ];
 
-const BANK_PROVIDERS = ['nubank', 'inter', 'santander', 'mercadopago'];
-
 async function ensureUser(username, email, plainPassword) {
     const existing = db.prepare('SELECT id FROM users WHERE username = ?').get(username);
     if (existing) return existing.id;
@@ -50,15 +48,6 @@ function ensureEnvelopesForUser(userId) {
     insert.run(userId, 'Gastos Imprevistos', 'UNEXPECTED_EXPENSES');
 }
 
-function ensureBankConnectionsForUser(userId) {
-    const insert = db.prepare(
-        `INSERT OR IGNORE INTO bank_connections (user_id, provider, status) VALUES (?, ?, 'DISCONNECTED')`
-    );
-    for (const provider of BANK_PROVIDERS) {
-        insert.run(userId, provider);
-    }
-}
-
 export const seedDatabase = async () => {
     const user1Id = await ensureUser(
         process.env.SEED_USER1_USERNAME || 'usuario1',
@@ -74,6 +63,5 @@ export const seedDatabase = async () => {
     for (const userId of [user1Id, user2Id]) {
         ensureCategoriesForUser(userId);
         ensureEnvelopesForUser(userId);
-        ensureBankConnectionsForUser(userId);
     }
 };

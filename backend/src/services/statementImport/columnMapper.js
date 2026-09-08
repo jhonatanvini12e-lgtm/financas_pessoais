@@ -83,15 +83,34 @@ export function normalizeDate(raw) {
     return Number.isNaN(parsed.getTime()) ? null : parsed.toISOString().slice(0, 10);
 }
 
-// Faturas de cartao costumam marcar compras parceladas com um contador tipo
-// "03/10" ou "PARC 3/10" dentro da propria descricao do lancamento. Extraimos
-// esse contador aqui pra que o importador saiba gerar as parcelas restantes
-// (ver services/statementImport/index.js e routes/transactions.js).
-const INSTALLMENT_PATTERN = /(?<!\d)(?:parc(?:ela)?\.?\s*)?(\d{1,2})\s*[/x]\s*(\d{1,2})(?!\d)/i;
+// Faturas de cartao costumam marcar compras parceladas com um contador dentro
+// da propria descricao do lancamento, mas o formato varia por banco: a
+// maioria usa "03/10" ou "PARC 3/10" -- e nesse formato a data da linha ja e a
+// data real daquela parcela especifica. Ja o Inter usa por extenso "(Parcela
+// 03 de 07)", mas repete em toda ocorrencia a data da COMPRA ORIGINAL (ou
+// seja, a mesma data de quando a parcela 1 foi feita), nao a data em que
+// aquela parcela especifica cai na fatura -- por isso marcamos esse formato
+// como "verbose" para que o chamador saiba que precisa corrigir a data (ver
+// resolveInstallmentDate abaixo).
+const INSTALLMENT_PATTERNS = [
+    { format: 'slash', regex: /(?<!\d)(?:parc(?:ela)?\.?\s*)?(\d{1,2})\s*[/x]\s*(\d{1,2})(?!\d)/i },
+    // Exige o prefixo "parc(ela)" aqui porque "de" sozinho e uma palavra comum
+    // demais em portugues pra usar como separador sem correr risco de falso
+    // positivo (ex: "RUA 3 DE MAIO").
+    { format: 'verbose', regex: /\bparc(?:ela)?\.?\s*(\d{1,2})\s*de\s*(\d{1,2})(?!\d)/i },
+];
 
 export function extractInstallmentInfo(description) {
     const text = String(description ?? '');
-    const match = text.match(INSTALLMENT_PATTERN);
+    let match = null;
+    let format = null;
+    for (const pattern of INSTALLMENT_PATTERNS) {
+        match = text.match(pattern.regex);
+        if (match) {
+            format = pattern.format;
+            break;
+        }
+    }
     if (!match) return null;
 
     const number = Number(match[1]);
@@ -102,11 +121,37 @@ export function extractInstallmentInfo(description) {
 
     const cleanDescription =
         (text.slice(0, match.index) + text.slice(match.index + match[0].length))
+            // remove parenteses que sobram vazios, ex: "(Parcela 03 de 07)"
+            // vira "()" depois de tirar o contador de dentro.
+            .replace(/\(\s*\)/g, '')
             .replace(/^[-–\s]+|[-–\s]+$/g, '')
             .replace(/\s{2,}/g, ' ')
             .trim() || text.trim();
 
-    return { number, total, cleanDescription };
+    return { number, total, cleanDescription, format };
+}
+
+export function addMonths(dateStr, months) {
+    const [year, month, day] = dateStr.split('-').map(Number);
+    const totalMonths = (month - 1) + months;
+    const targetYear = year + Math.floor(totalMonths / 12);
+    const targetMonth = ((totalMonths % 12) + 12) % 12;
+    const lastDayOfTargetMonth = new Date(targetYear, targetMonth + 1, 0).getDate();
+    const targetDay = Math.min(day, lastDayOfTargetMonth);
+    return `${targetYear}-${String(targetMonth + 1).padStart(2, '0')}-${String(targetDay).padStart(2, '0')}`;
+}
+
+// So no formato "verbose" (ver comentario acima de INSTALLMENT_PATTERNS) a
+// data da linha e a da compra original em vez da parcela atual -- desloca
+// mes a mes para chegar na data real dessa parcela. Sem isso, tanto a parcela
+// importada quanto as parcelas futuras geradas a partir dela (ver
+// routes/transactions.js) ficam com a data errada.
+export function resolveInstallmentDate(rawDate, installment) {
+    if (!rawDate || !installment) return rawDate;
+    if (installment.format === 'verbose' && installment.number > 1) {
+        return addMonths(rawDate, installment.number - 1);
+    }
+    return rawDate;
 }
 
 export function rowsToTransactions(headerRow, dataRows) {
@@ -118,7 +163,7 @@ export function rowsToTransactions(headerRow, dataRows) {
             const rawDescription = descIdx !== -1 ? String(row[descIdx] ?? '').trim() : 'Transacao importada';
             const installment = extractInstallmentInfo(rawDescription);
             return {
-                date: normalizeDate(row[dateIdx]),
+                date: resolveInstallmentDate(normalizeDate(row[dateIdx]), installment),
                 description: installment ? installment.cleanDescription : rawDescription,
                 amount: parseAmount(row[amountIdx]),
                 installmentNumber: installment?.number ?? null,

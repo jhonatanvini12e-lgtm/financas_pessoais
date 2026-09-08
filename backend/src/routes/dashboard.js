@@ -12,7 +12,7 @@ router.get('/', (req, res) => {
     const userId = req.user.id;
 
     // Mesmo calculo de accounts.js: saldo inicial da conta + lancamentos
-    // feitos depois (manuais, import de extrato, sync Open Finance).
+    // feitos depois (manuais ou import de extrato/fatura).
     const totalBalance = db
         .prepare(
             `SELECT COALESCE(SUM(

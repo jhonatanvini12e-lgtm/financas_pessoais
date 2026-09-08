@@ -14,7 +14,7 @@ const NAV_ITEMS = [
     { to: '/categories', label: 'Categorias' },
     { to: '/budget', label: 'Orcamento' },
     { to: '/accounts', label: 'Contas e Cartoes' },
-    { to: '/banks', label: 'Open Finance' },
+    { to: '/invoice-export', label: 'Exportacao de Fatura' },
     { to: '/debts', label: 'Dividas' },
     { to: '/caixinhas-investimentos', label: 'Caixinhas e Investimentos' },
     { to: '/turning-point', label: 'Ponto de Virada' },

@@ -3,8 +3,6 @@ import db from '../db/index.js';
 import { runBackup } from '../services/backupService.js';
 import { runCardChecks } from '../services/cardService.js';
 import { checkBudgetAlerts } from '../services/budgetEngine.js';
-import { syncBankConnection } from '../services/bankSyncService.js';
-import { SUPPORTED_PROVIDERS } from '../services/bankProviders/index.js';
 
 function allUserIds() {
     return db.prepare('SELECT id FROM users').all().map((u) => u.id);
@@ -40,18 +38,5 @@ export function startCronJobs() {
         }
     });
 
-    // Sincronizacao mock periodica com os bancos (a cada 6 horas).
-    cron.schedule('0 */6 * * *', async () => {
-        for (const userId of allUserIds()) {
-            for (const provider of SUPPORTED_PROVIDERS) {
-                try {
-                    await syncBankConnection(userId, provider);
-                } catch (err) {
-                    console.error(`Erro ao sincronizar ${provider} do usuario ${userId}:`, err.message);
-                }
-            }
-        }
-    });
-
-    console.log('Jobs agendados: backup diario, checagem de cartoes/orcamento, sync bancario mock.');
+    console.log('Jobs agendados: backup diario, checagem de cartoes/orcamento.');
 }

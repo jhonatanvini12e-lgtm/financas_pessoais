@@ -119,12 +119,6 @@ export const sendCardLimitAlert = (usagePercent) =>
         `O uso total do limite de credito atingiu ${(usagePercent * 100).toFixed(0)}% do limite global disponivel.`
     );
 
-export const sendSyncFailureAlert = (provider, errorMessage) =>
-    sendMail(
-        `Falha na sincronizacao com ${provider}`,
-        `Nao foi possivel sincronizar os dados da conta/cartao via Open Finance (${provider}). Detalhe: ${errorMessage}. Use o assistente de importacao manual de OFX enquanto isso.`
-    );
-
 export const sendBudgetAlert = (categoryName, percent) =>
     sendMail(
         `Orcamento de "${categoryName}" atingiu ${(percent * 100).toFixed(0)}%`,

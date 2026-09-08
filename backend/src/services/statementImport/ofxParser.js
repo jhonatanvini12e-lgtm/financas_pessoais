@@ -3,7 +3,7 @@
 // Em vez de depender de uma lib externa pouco mantida, extraimos os blocos
 // <STMTTRN>...</STMTTRN> por regex e lemos os campos que realmente usamos.
 
-import { extractInstallmentInfo } from './columnMapper.js';
+import { extractInstallmentInfo, resolveInstallmentDate } from './columnMapper.js';
 
 function extractTag(block, tag) {
     const match = block.match(new RegExp(`<${tag}>\\s*([^\\r\\n<]+)`, 'i'));
@@ -29,7 +29,7 @@ export function parseOfx(fileContent) {
         const installment = extractInstallmentInfo(rawDescription);
         return {
             fitid: extractTag(block, 'FITID'),
-            date: parseOfxDate(extractTag(block, 'DTPOSTED')),
+            date: resolveInstallmentDate(parseOfxDate(extractTag(block, 'DTPOSTED')), installment),
             amount: Number.isFinite(amount) ? amount : 0,
             description: installment ? installment.cleanDescription : rawDescription,
             installmentNumber: installment?.number ?? null,

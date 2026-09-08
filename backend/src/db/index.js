@@ -32,11 +32,22 @@ const migrateColumns = () => {
     }
 };
 
+// Recurso de Open Finance removido (pessoa fisica nao consegue se
+// credenciar como participante junto ao Banco Central para usa-lo de
+// verdade -- era so uma simulacao). "CREATE TABLE IF NOT EXISTS" no
+// schema.sql nao apaga tabelas ja existentes num banco antigo, entao
+// derrubamos aqui as tabelas orfas que o recurso deixou pra tras.
+const dropLegacyTables = () => {
+    db.exec('DROP TABLE IF EXISTS sync_logs');
+    db.exec('DROP TABLE IF EXISTS bank_connections');
+};
+
 export const initDB = async () => {
     const schemaPath = path.join(__dirname, 'schema.sql');
     const schema = fs.readFileSync(schemaPath, 'utf8');
     db.exec(schema);
     migrateColumns();
+    dropLegacyTables();
     console.log('Banco de dados criptografado sincronizado.');
 
     const { seedDatabase } = await import('./seed.js');

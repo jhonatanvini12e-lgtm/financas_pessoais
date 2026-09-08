@@ -496,6 +496,17 @@ body {
 .text-negative { color: #ef4444; }
 .text-positive { color: #22c55e; }
 
+.month-divider-row td {
+  padding: 10px 8px 6px;
+  color: var(--text-muted);
+  font-weight: 600;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  background: rgba(255, 255, 255, 0.03);
+  border-bottom: 1px solid var(--border-glass);
+}
+
 /* ---------- Bank connections / badges ---------- */
 
 .connection-card {

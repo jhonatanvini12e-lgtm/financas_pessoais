@@ -4,6 +4,7 @@ import crypto from 'node:crypto';
 import db from '../db/index.js';
 import { categorize, buildCategoryLearningMap } from '../services/categorizationEngine.js';
 import { parseStatementFile } from '../services/statementImport/index.js';
+import { addMonths } from '../services/statementImport/columnMapper.js';
 import { checkBudgetAlerts } from '../services/budgetEngine.js';
 
 const router = express.Router();
@@ -57,16 +58,6 @@ router.get('/compare', (req, res) => {
 
     res.json({ months, monthly, byCategory });
 });
-
-function addMonths(dateStr, months) {
-    const [year, month, day] = dateStr.split('-').map(Number);
-    const totalMonths = (month - 1) + months;
-    const targetYear = year + Math.floor(totalMonths / 12);
-    const targetMonth = ((totalMonths % 12) + 12) % 12;
-    const lastDayOfTargetMonth = new Date(targetYear, targetMonth + 1, 0).getDate();
-    const targetDay = Math.min(day, lastDayOfTargetMonth);
-    return `${targetYear}-${String(targetMonth + 1).padStart(2, '0')}-${String(targetDay).padStart(2, '0')}`;
-}
 
 router.post('/', (req, res) => {
     const { account_id, card_id, category_id, amount, date, description, installments } = req.body;
@@ -133,13 +124,13 @@ router.delete('/:id', (req, res) => {
     res.json({ ok: true });
 });
 
-// Assistente de contingencia: importacao manual de extrato (.ofx, .csv,
-// .xlsx ou .pdf) quando o Open Finance falha. PDF e interpretado por IA
-// (ver services/statementImport/pdfParser.js), os demais formatos por
-// parsers proprios.
+// Plano de contingencia / exportacao de fatura: importacao manual de
+// extrato (.ofx, .csv, .xlsx ou .pdf), ja que nao ha sync automatico com
+// banco. PDF e interpretado por IA (ver services/statementImport/pdfParser.js),
+// os demais formatos por parsers proprios.
 router.post('/import-statement', upload.single('file'), async (req, res) => {
     if (!req.file) return res.status(400).json({ error: 'Arquivo e obrigatorio' });
-    const { account_id, card_id } = req.body;
+    const { account_id, card_id, password } = req.body;
 
     const categories = db.prepare('SELECT id, name FROM categories WHERE user_id = ?').all(req.user.id);
 
@@ -148,9 +139,15 @@ router.post('/import-statement', upload.single('file'), async (req, res) => {
         // Passa os nomes das categorias do usuario para que, no caso de PDF, a
         // mesma IA que le a fatura ja sugira uma categoria por lancamento com
         // base na descricao (ex: "LONDRISUL TRANSPORTE C" -> "Transporte").
-        parsed = await parseStatementFile(req.file.originalname, req.file.buffer, categories.map((c) => c.name));
+        // `password` so e usado no caminho do PDF, para faturas protegidas.
+        parsed = await parseStatementFile(req.file.originalname, req.file.buffer, categories.map((c) => c.name), password);
     } catch (err) {
-        return res.status(400).json({ error: err.message });
+        // PDF_PASSWORD_REQUIRED/PDF_PASSWORD_INCORRECT (ver pdfParser.js) usam
+        // 422 em vez de 400 para o front distinguir "precisa de senha" de um
+        // erro comum de importacao e mostrar o popup de senha em vez do banner
+        // de erro generico.
+        const status = err.code === 'PDF_PASSWORD_REQUIRED' || err.code === 'PDF_PASSWORD_INCORRECT' ? 422 : 400;
+        return res.status(status).json({ error: err.message, code: err.code });
     }
 
     const categoryIdByName = new Map(categories.map((c) => [c.name.trim().toLowerCase(), c.id]));
