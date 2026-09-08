@@ -1,0 +1,12 @@
+node_modules/
+dist/
+build/
+.env
+.env.*
+!.env.example
+*.db
+*.db-journal
+backend/data/
+backend/backups/
+*.log
+.DS_Store

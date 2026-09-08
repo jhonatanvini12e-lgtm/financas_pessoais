@@ -1,0 +1,204 @@
+CREATE TABLE IF NOT EXISTS users (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    username TEXT UNIQUE NOT NULL,
+    password_hash TEXT NOT NULL,
+    email TEXT NOT NULL,
+    last_login DATETIME,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS known_devices (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL,
+    fingerprint TEXT NOT NULL,
+    label TEXT,
+    last_seen DATETIME DEFAULT CURRENT_TIMESTAMP,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY(user_id) REFERENCES users(id),
+    UNIQUE(user_id, fingerprint)
+);
+
+CREATE TABLE IF NOT EXISTS sessions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL,
+    jti TEXT UNIQUE NOT NULL,
+    device_fingerprint TEXT,
+    last_activity DATETIME DEFAULT CURRENT_TIMESTAMP,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    revoked INTEGER DEFAULT 0,
+    FOREIGN KEY(user_id) REFERENCES users(id)
+);
+
+CREATE TABLE IF NOT EXISTS accounts (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL,
+    bank_name TEXT NOT NULL,
+    provider TEXT,
+    balance REAL DEFAULT 0,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY(user_id) REFERENCES users(id)
+);
+
+CREATE TABLE IF NOT EXISTS credit_cards (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL,
+    card_name TEXT NOT NULL,
+    credit_limit REAL NOT NULL,
+    closing_day INTEGER NOT NULL,
+    due_day INTEGER NOT NULL,
+    provider TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY(user_id) REFERENCES users(id)
+);
+
+CREATE TABLE IF NOT EXISTS categories (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER,
+    name TEXT NOT NULL,
+    type TEXT CHECK(type IN ('INCOME', 'EXPENSE')) NOT NULL,
+    keywords TEXT,
+    budget_limit REAL DEFAULT 0
+);
+
+CREATE TABLE IF NOT EXISTS transactions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL,
+    account_id INTEGER,
+    card_id INTEGER,
+    category_id INTEGER,
+    amount REAL NOT NULL,
+    date DATETIME NOT NULL,
+    description TEXT,
+    status TEXT DEFAULT 'PENDING',
+    external_fitid TEXT,
+    source TEXT DEFAULT 'MANUAL',
+    installment_group TEXT,
+    installment_number INTEGER,
+    installment_total INTEGER,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY(user_id) REFERENCES users(id),
+    FOREIGN KEY(account_id) REFERENCES accounts(id),
+    FOREIGN KEY(card_id) REFERENCES credit_cards(id),
+    FOREIGN KEY(category_id) REFERENCES categories(id)
+);
+
+CREATE TABLE IF NOT EXISTS bank_connections (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL,
+    provider TEXT NOT NULL,
+    status TEXT DEFAULT 'DISCONNECTED',
+    last_sync_at DATETIME,
+    last_error TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY(user_id) REFERENCES users(id),
+    UNIQUE(user_id, provider)
+);
+
+CREATE TABLE IF NOT EXISTS sync_logs (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    connection_id INTEGER NOT NULL,
+    status TEXT NOT NULL,
+    message TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY(connection_id) REFERENCES bank_connections(id)
+);
+
+CREATE TABLE IF NOT EXISTS ofx_imports (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL,
+    account_id INTEGER,
+    card_id INTEGER,
+    filename TEXT,
+    imported_count INTEGER DEFAULT 0,
+    skipped_count INTEGER DEFAULT 0,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY(user_id) REFERENCES users(id)
+);
+
+CREATE TABLE IF NOT EXISTS envelopes (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL,
+    name TEXT NOT NULL,
+    type TEXT DEFAULT 'CUSTOM',
+    target_amount REAL DEFAULT 0,
+    current_amount REAL DEFAULT 0,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY(user_id) REFERENCES users(id)
+);
+
+CREATE TABLE IF NOT EXISTS envelope_transactions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    envelope_id INTEGER NOT NULL,
+    amount REAL NOT NULL,
+    type TEXT CHECK(type IN ('DEPOSIT', 'WITHDRAW')) NOT NULL,
+    note TEXT,
+    date DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY(envelope_id) REFERENCES envelopes(id)
+);
+
+CREATE TABLE IF NOT EXISTS debts (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL,
+    name TEXT NOT NULL,
+    creditor TEXT,
+    principal REAL NOT NULL,
+    current_balance REAL NOT NULL,
+    interest_rate_monthly REAL NOT NULL,
+    minimum_payment REAL NOT NULL,
+    due_day INTEGER,
+    status TEXT DEFAULT 'OPEN',
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY(user_id) REFERENCES users(id)
+);
+
+CREATE TABLE IF NOT EXISTS debt_payments (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    debt_id INTEGER NOT NULL,
+    amount REAL NOT NULL,
+    date DATETIME DEFAULT CURRENT_TIMESTAMP,
+    note TEXT,
+    FOREIGN KEY(debt_id) REFERENCES debts(id)
+);
+
+CREATE TABLE IF NOT EXISTS investments (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL,
+    type TEXT NOT NULL,
+    name TEXT NOT NULL,
+    amount_invested REAL NOT NULL,
+    current_value REAL NOT NULL,
+    expected_monthly_return_rate REAL,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY(user_id) REFERENCES users(id)
+);
+
+CREATE TABLE IF NOT EXISTS investment_goals (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL,
+    name TEXT NOT NULL,
+    target_amount REAL NOT NULL,
+    target_date DATE,
+    priority INTEGER DEFAULT 0,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY(user_id) REFERENCES users(id)
+);
+
+CREATE TABLE IF NOT EXISTS alerts (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL,
+    type TEXT NOT NULL,
+    severity TEXT DEFAULT 'INFO',
+    message TEXT NOT NULL,
+    read INTEGER DEFAULT 0,
+    emailed INTEGER DEFAULT 0,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY(user_id) REFERENCES users(id)
+);
+
+CREATE TABLE IF NOT EXISTS backups (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    filename TEXT NOT NULL,
+    size_bytes INTEGER,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
