@@ -3,12 +3,20 @@ import { api } from '../api/client.js';
 
 const STATUS_LABEL = { PAID: 'Paga', PENDING: 'Pendente', LATE: 'Atrasada' };
 const STATUS_CLASS = { PAID: 'status-paid', PENDING: 'status-pending', LATE: 'status-late' };
+const TYPE_LABEL = { BILL_FIXED: 'Fixa', BILL_ONE_TIME: 'Avulsa', CARD_INVOICE: 'Fatura' };
+
+function typeKeyFor(item) {
+    if (item.kind === 'CARD_INVOICE') return 'CARD_INVOICE';
+    return item.recurring ? 'BILL_FIXED' : 'BILL_ONE_TIME';
+}
+
+const EMPTY_FORM = { name: '', category_id: '', expected_amount: '', due_day: '', due_date: '', recurring: true };
 
 export default function Bills() {
     const [data, setData] = useState(null);
     const [categories, setCategories] = useState([]);
     const [error, setError] = useState('');
-    const [form, setForm] = useState({ name: '', category_id: '', expected_amount: '', due_day: '' });
+    const [form, setForm] = useState(EMPTY_FORM);
 
     const load = () => {
         api.get('/bills').then(setData).catch((err) => setError(err.message));
@@ -23,9 +31,11 @@ export default function Bills() {
                 name: form.name,
                 category_id: form.category_id ? Number(form.category_id) : null,
                 expected_amount: Number(form.expected_amount) || 0,
-                due_day: Number(form.due_day),
+                recurring: form.recurring,
+                due_day: form.recurring ? Number(form.due_day) : null,
+                due_date: form.recurring ? null : form.due_date,
             });
-            setForm({ name: '', category_id: '', expected_amount: '', due_day: '' });
+            setForm(EMPTY_FORM);
             load();
         } catch (err) {
             setError(err.message);
@@ -75,7 +85,15 @@ export default function Bills() {
                         ))}
                     </select>
                     <input placeholder="Valor esperado" type="number" step="0.01" value={form.expected_amount} onChange={(e) => setForm({ ...form, expected_amount: e.target.value })} />
-                    <input placeholder="Dia de vencimento (1-31)" type="number" min="1" max="31" value={form.due_day} onChange={(e) => setForm({ ...form, due_day: e.target.value })} required />
+                    <label className="checkbox-label">
+                        <input type="checkbox" checked={form.recurring} onChange={(e) => setForm({ ...form, recurring: e.target.checked })} />
+                        Conta fixa (repete todo mes)
+                    </label>
+                    {form.recurring ? (
+                        <input placeholder="Dia de vencimento (1-31)" type="number" min="1" max="31" value={form.due_day} onChange={(e) => setForm({ ...form, due_day: e.target.value })} required />
+                    ) : (
+                        <input type="date" value={form.due_date} onChange={(e) => setForm({ ...form, due_date: e.target.value })} required />
+                    )}
                     <button type="submit" className="btn-primary">Adicionar</button>
                 </form>
             </section>
@@ -84,13 +102,14 @@ export default function Bills() {
                 <div className="table-scroll">
                     <table className="data-table">
                         <thead>
-                            <tr><th>Nome</th><th>Categoria</th><th>Valor</th><th>Vencimento</th><th>Status</th><th /></tr>
+                            <tr><th>Nome</th><th>Categoria</th><th>Tipo</th><th>Valor</th><th>Vencimento</th><th>Status</th><th /></tr>
                         </thead>
                         <tbody>
                             {data.items.map((item) => (
                                 <tr key={`${item.kind}-${item.id}`}>
                                     <td>{item.name}</td>
                                     <td>{item.categoryName || '-'}</td>
+                                    <td>{TYPE_LABEL[typeKeyFor(item)]}</td>
                                     <td>R$ {item.expectedAmount.toFixed(2)}</td>
                                     <td>{item.dueDate}</td>
                                     <td><span className={`badge-status ${STATUS_CLASS[item.status]}`}>{STATUS_LABEL[item.status]}</span></td>
@@ -105,7 +124,7 @@ export default function Bills() {
                                 </tr>
                             ))}
                             {data.items.length === 0 && (
-                                <tr><td colSpan={6}>Nenhuma conta cadastrada ainda.</td></tr>
+                                <tr><td colSpan={7}>Nenhuma conta cadastrada ainda.</td></tr>
                             )}
                         </tbody>
                     </table>

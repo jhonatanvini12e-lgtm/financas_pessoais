@@ -8,9 +8,13 @@ function currentPeriod(referenceDate = new Date()) {
     return referenceDate.toISOString().slice(0, 7); // 'YYYY-MM'
 }
 
+// Contas com vencimento no dia 29-31 precisam de um teto por mes (fevereiro
+// so tem 28/29 dias) -- sem isso, `new Date(year, month-1, 31)` "rola" para o
+// mes seguinte e a conta de fevereiro apareceria com vencimento em marco.
 function dueDateForPeriod(period, dueDay) {
     const [year, month] = period.split('-').map(Number);
-    return new Date(year, month - 1, dueDay);
+    const lastDayOfMonth = new Date(year, month, 0).getDate();
+    return new Date(year, month - 1, Math.min(dueDay, lastDayOfMonth));
 }
 
 function statusFor(dueDate, paid, referenceDate) {
@@ -18,16 +22,19 @@ function statusFor(dueDate, paid, referenceDate) {
     return referenceDate > dueDate ? 'LATE' : 'PENDING';
 }
 
-// Contas recorrentes cadastradas manualmente (aluguel, agua, luz etc). O
-// vencimento do mes corrente e calculado a partir de due_day; "paga" e uma
-// linha em bill_payments para esse (bill_id, period) -- nao ha deteccao
-// automatica a partir de transacoes, e' o usuario quem marca.
+// Contas cadastradas manualmente. Fixas (recurring=1) repetem todo mes: o
+// vencimento do mes corrente e' calculado a partir de due_day, e "paga" vale
+// so para o (bill_id, period) do mes corrente -- no mes seguinte ela volta a
+// aparecer como pendente. Avulsas (recurring=0) tem uma data unica em
+// due_date e, uma vez pagas, ficam paga para sempre (nao regeneram).
+// "paga" nunca e' detectado a partir de transacoes -- e' o usuario quem marca.
 export function getBillsStatus(userId, referenceDate = new Date()) {
-    const period = currentPeriod(referenceDate);
     const bills = db.prepare('SELECT * FROM bills WHERE user_id = ? AND active = 1').all(userId);
 
     return bills.map((bill) => {
-        const dueDate = dueDateForPeriod(period, bill.due_day);
+        const isRecurring = bill.recurring !== 0;
+        const period = isRecurring ? currentPeriod(referenceDate) : bill.due_date.slice(0, 7);
+        const dueDate = isRecurring ? dueDateForPeriod(period, bill.due_day) : new Date(bill.due_date);
         const payment = db
             .prepare('SELECT * FROM bill_payments WHERE bill_id = ? AND period = ?')
             .get(bill.id, period);
@@ -42,6 +49,7 @@ export function getBillsStatus(userId, referenceDate = new Date()) {
             categoryName: category?.name || null,
             expectedAmount: bill.expected_amount,
             dueDay: bill.due_day,
+            recurring: isRecurring,
             period,
             dueDate: dueDate.toISOString().slice(0, 10),
             paid: Boolean(payment),

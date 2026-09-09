@@ -25,6 +25,35 @@ db.pragma(`legacy=4`);
 db.pragma(`key='${DB_PASSWORD}'`);
 db.pragma('foreign_keys = ON');
 
+// bills.due_day nasceu NOT NULL (so existiam contas fixas). Contas avulsas
+// usam due_date no lugar, entao due_day precisa aceitar NULL -- e SQLite nao
+// permite relaxar um NOT NULL com ALTER TABLE, so reconstruindo a tabela.
+const migrateBillsDueDayNullable = () => {
+    const dueDayCol = db.prepare('PRAGMA table_info(bills)').all().find((c) => c.name === 'due_day');
+    if (!dueDayCol || dueDayCol.notnull === 0) return;
+
+    db.pragma('foreign_keys = OFF');
+    db.exec(`
+        CREATE TABLE bills_new (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL,
+            name TEXT NOT NULL,
+            category_id INTEGER,
+            expected_amount REAL DEFAULT 0,
+            due_day INTEGER,
+            active INTEGER DEFAULT 1,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY(user_id) REFERENCES users(id),
+            FOREIGN KEY(category_id) REFERENCES categories(id)
+        );
+        INSERT INTO bills_new (id, user_id, name, category_id, expected_amount, due_day, active, created_at)
+            SELECT id, user_id, name, category_id, expected_amount, due_day, active, created_at FROM bills;
+        DROP TABLE bills;
+        ALTER TABLE bills_new RENAME TO bills;
+    `);
+    db.pragma('foreign_keys = ON');
+};
+
 const migrateColumns = () => {
     const existing = new Set(db.prepare('PRAGMA table_info(transactions)').all().map((c) => c.name));
     const columns = {
@@ -34,6 +63,16 @@ const migrateColumns = () => {
     };
     for (const [name, type] of Object.entries(columns)) {
         if (!existing.has(name)) db.exec(`ALTER TABLE transactions ADD COLUMN ${name} ${type}`);
+    }
+
+    migrateBillsDueDayNullable();
+
+    // recurring=1 (default) mantem o comportamento original: conta fixa que
+    // repete todo mes no dia due_day. recurring=0 usa due_date (data unica).
+    const existingBillColumns = new Set(db.prepare('PRAGMA table_info(bills)').all().map((c) => c.name));
+    const billColumns = { recurring: 'INTEGER DEFAULT 1', due_date: 'TEXT' };
+    for (const [name, type] of Object.entries(billColumns)) {
+        if (!existingBillColumns.has(name)) db.exec(`ALTER TABLE bills ADD COLUMN ${name} ${type}`);
     }
 };
 

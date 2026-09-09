@@ -130,13 +130,18 @@ CREATE TABLE IF NOT EXISTS envelope_transactions (
     FOREIGN KEY(envelope_id) REFERENCES envelopes(id)
 );
 
+-- recurring=1 (padrao): conta fixa que repete todo mes no dia due_day
+-- (aluguel, agua, luz, assinaturas). recurring=0: conta avulsa com data unica
+-- em due_date, nao repete depois de paga.
 CREATE TABLE IF NOT EXISTS bills (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     user_id INTEGER NOT NULL,
     name TEXT NOT NULL,
     category_id INTEGER,
     expected_amount REAL DEFAULT 0,
-    due_day INTEGER NOT NULL,
+    due_day INTEGER,
+    recurring INTEGER DEFAULT 1,
+    due_date TEXT,
     active INTEGER DEFAULT 1,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY(user_id) REFERENCES users(id),
