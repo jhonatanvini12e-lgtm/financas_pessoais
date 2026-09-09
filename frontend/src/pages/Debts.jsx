@@ -100,6 +100,7 @@ export default function Debts() {
             </section>
 
             <section className="card">
+                <div className="table-scroll">
                 <table className="data-table">
                     <thead><tr><th>Nome</th><th>Credor</th><th>Saldo</th><th>Juros a.m.</th><th>Minimo</th><th /></tr></thead>
                     <tbody>
@@ -114,6 +115,7 @@ export default function Debts() {
                         ))}
                     </tbody>
                 </table>
+                </div>
             </section>
 
             <section className="card">

@@ -122,6 +122,7 @@ export default function Budget() {
                             detail.items.length === 0 ? (
                                 <p className="muted">Nenhum gasto encontrado neste periodo.</p>
                             ) : (
+                                <div className="table-scroll">
                                 <table className="data-table">
                                     <thead>
                                         <tr><th>Data</th><th>Descricao</th><th>Valor</th></tr>
@@ -136,6 +137,7 @@ export default function Budget() {
                                         ))}
                                     </tbody>
                                 </table>
+                                </div>
                             )
                         )}
                     </div>

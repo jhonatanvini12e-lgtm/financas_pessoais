@@ -63,6 +63,7 @@ export default function Accounts() {
             <div className="two-col">
                 <section className="card">
                     <h2>Contas bancarias</h2>
+                    <div className="table-scroll">
                     <table className="data-table">
                         <thead>
                             <tr><th>Banco</th><th>Provider</th><th>Saldo</th><th /></tr>
@@ -78,6 +79,7 @@ export default function Accounts() {
                             ))}
                         </tbody>
                     </table>
+                    </div>
 
                     <form onSubmit={addAccount} className="inline-form">
                         <input placeholder="Nome do banco" value={accountForm.bank_name}
@@ -93,6 +95,7 @@ export default function Accounts() {
 
                 <section className="card">
                     <h2>Cartoes de credito</h2>
+                    <div className="table-scroll">
                     <table className="data-table">
                         <thead>
                             <tr><th>Cartao</th><th>Limite</th><th>Fecha</th><th>Vence</th><th /></tr>
@@ -109,6 +112,7 @@ export default function Accounts() {
                             ))}
                         </tbody>
                     </table>
+                    </div>
 
                     <form onSubmit={addCard} className="inline-form">
                         <input placeholder="Nome do cartao" value={cardForm.card_name}

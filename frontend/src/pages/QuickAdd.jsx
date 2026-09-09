@@ -1,13 +1,10 @@
 import { useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
 import { api } from '../api/client.js';
-import { useAuth } from '../context/AuthContext.jsx';
 import ReauthModal from '../components/ReauthModal.jsx';
 
 const today = () => new Date().toISOString().slice(0, 10);
 
 export default function QuickAdd() {
-    const { logout } = useAuth();
     const [categories, setCategories] = useState([]);
     const [accounts, setAccounts] = useState([]);
     const [cards, setCards] = useState([]);
@@ -71,7 +68,6 @@ export default function QuickAdd() {
             <div className="quickadd-panel">
                 <div className="quickadd-header">
                     <h1>Lancamento rapido</h1>
-                    <Link to="/" className="btn-link">Abrir app completo</Link>
                 </div>
 
                 <form onSubmit={submit} className="quickadd-form">
@@ -187,8 +183,6 @@ export default function QuickAdd() {
                         {saving ? 'Salvando...' : 'Salvar lancamento'}
                     </button>
                 </form>
-
-                <button className="btn-link quickadd-logout" onClick={logout}>Sair</button>
             </div>
 
             <ReauthModal />

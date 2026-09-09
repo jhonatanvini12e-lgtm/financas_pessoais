@@ -25,9 +25,9 @@ function App() {
 
     return (
         <Routes>
-            <Route path="/quick-add" element={<QuickAdd />} />
             <Route element={<Layout />}>
                 <Route path="/" element={<Dashboard />} />
+                <Route path="/quick-add" element={<QuickAdd />} />
                 <Route path="/accounts" element={<Accounts />} />
                 <Route path="/invoice-export" element={<InvoiceExport />} />
                 <Route path="/ofx-import" element={<OfxImportWizard />} />

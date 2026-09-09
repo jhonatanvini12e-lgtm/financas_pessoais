@@ -1,4 +1,4 @@
-const API_BASE = import.meta.env.VITE_API_URL || `http://${window.location.hostname}:3000/api`;
+const API_BASE = import.meta.env.VITE_API_URL || `${window.location.origin}/api`;
 
 let onSessionInvalid = null;
 export function setSessionInvalidHandler(fn) {

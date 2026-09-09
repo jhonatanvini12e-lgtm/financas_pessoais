@@ -175,6 +175,7 @@ export default function CaixinhasInvestimentos() {
             <div className="two-col">
                 <section className="card">
                     <h2>Meus investimentos</h2>
+                    <div className="table-scroll">
                     <table className="data-table">
                         <thead><tr><th>Nome</th><th>Tipo</th><th>Investido</th><th>Valor atual</th></tr></thead>
                         <tbody>
@@ -187,6 +188,7 @@ export default function CaixinhasInvestimentos() {
                             ))}
                         </tbody>
                     </table>
+                    </div>
 
                     <form onSubmit={addInvestment} className="inline-form">
                         <select value={invForm.type} onChange={(e) => setInvForm({ ...invForm, type: e.target.value })}
@@ -206,6 +208,7 @@ export default function CaixinhasInvestimentos() {
 
                 <section className="card">
                     <h2>Metas financeiras</h2>
+                    <div className="table-scroll">
                     <table className="data-table">
                         <thead><tr><th>Meta</th><th>Meses</th><th>Aporte mensal necessario</th></tr></thead>
                         <tbody>
@@ -217,6 +220,7 @@ export default function CaixinhasInvestimentos() {
                             ))}
                         </tbody>
                     </table>
+                    </div>
 
                     <form onSubmit={addGoal} className="inline-form">
                         <input placeholder="Nome da meta" value={goalForm.name} onChange={(e) => setGoalForm({ ...goalForm, name: e.target.value })} required />

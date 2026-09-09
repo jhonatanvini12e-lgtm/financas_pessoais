@@ -1,5 +1,5 @@
-import { useCallback, useEffect } from 'react';
-import { NavLink, Outlet } from 'react-router-dom';
+import { useCallback, useEffect, useState } from 'react';
+import { NavLink, Outlet, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext.jsx';
 import { useIdleTimer } from '../hooks/useIdleTimer.js';
 import { useAlertsPolling } from '../hooks/useAlertsPolling.js';
@@ -26,10 +26,16 @@ const NAV_ITEMS = [
 export default function Layout() {
     const { user, logout, reauth, setReauth } = useAuth();
     const unreadAlerts = useAlertsPolling(!reauth);
+    const [navOpen, setNavOpen] = useState(false);
+    const location = useLocation();
 
     useEffect(() => {
         requestNotificationPermission();
     }, []);
+
+    useEffect(() => {
+        setNavOpen(false);
+    }, [location.pathname]);
 
     const handleIdle = useCallback(() => {
         if (user) setReauth({ reason: 'INACTIVE', userId: user.id });
@@ -39,7 +45,7 @@ export default function Layout() {
 
     return (
         <div className="app-shell">
-            <aside className="sidebar">
+            <aside className={`sidebar ${navOpen ? 'sidebar-open' : ''}`}>
                 <Logo size={32} wordmark="Financas" className="sidebar-brand" />
                 <nav>
                     {NAV_ITEMS.map((item) => (
@@ -50,8 +56,18 @@ export default function Layout() {
                 </nav>
             </aside>
 
+            {navOpen && <div className="nav-overlay" onClick={() => setNavOpen(false)} />}
+
             <div className="app-main">
                 <header className="topbar">
+                    <button
+                        type="button"
+                        className="nav-toggle"
+                        aria-label="Abrir menu"
+                        onClick={() => setNavOpen((open) => !open)}
+                    >
+                        ☰
+                    </button>
                     <div className="topbar-alerts">
                         <NavLink to="/alerts" className="bell">
                             Alertas {unreadAlerts.length > 0 && <span className="badge">{unreadAlerts.length}</span>}

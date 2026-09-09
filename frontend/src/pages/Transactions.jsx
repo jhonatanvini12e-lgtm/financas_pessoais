@@ -233,6 +233,7 @@ export default function Transactions() {
                 </div>
                 {recategorizeMsg && <p className="muted">{recategorizeMsg}</p>}
 
+                <div className="table-scroll">
                 <table className="data-table">
                     <thead>
                         <tr><th>Data</th><th>Descricao</th><th>Categoria</th><th>Banco</th><th>Valor</th><th /></tr>
@@ -270,6 +271,7 @@ export default function Transactions() {
                         })()}
                     </tbody>
                 </table>
+                </div>
             </section>
 
             {editingTxn && (

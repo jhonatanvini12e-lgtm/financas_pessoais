@@ -47,6 +47,7 @@ export default function Categories() {
             </section>
 
             <section className="card">
+                <div className="table-scroll">
                 <table className="data-table">
                     <thead>
                         <tr><th>Nome</th><th>Tipo</th><th>Palavras-chave</th><th>Teto</th><th /></tr>
@@ -63,6 +64,7 @@ export default function Categories() {
                         ))}
                     </tbody>
                 </table>
+                </div>
             </section>
         </div>
     );

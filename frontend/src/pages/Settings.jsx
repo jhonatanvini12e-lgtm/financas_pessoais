@@ -62,6 +62,7 @@ export default function Settings() {
                 <h2>Backup do banco de dados</h2>
                 <p className="muted">Rotina diaria automatica mantem apenas os 2 backups mais recentes.</p>
                 <button className="btn-primary" onClick={runBackup}>Fazer backup agora</button>
+                <div className="table-scroll">
                 <table className="data-table">
                     <thead><tr><th>Arquivo</th><th>Tamanho</th><th>Data</th></tr></thead>
                     <tbody>
@@ -74,6 +75,7 @@ export default function Settings() {
                         ))}
                     </tbody>
                 </table>
+                </div>
             </section>
         </div>
     );
