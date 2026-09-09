@@ -5,9 +5,11 @@ import LineChartCard from '../components/charts/LineChartCard.jsx';
 export default function Debts() {
     const [debts, setDebts] = useState([]);
     const [summary, setSummary] = useState(null);
+    const [plan, setPlan] = useState(null);
     const [error, setError] = useState('');
     const [form, setForm] = useState({ name: '', creditor: '', principal: '', current_balance: '', interest_rate_monthly: '', minimum_payment: '' });
 
+    const [showAdvanced, setShowAdvanced] = useState(false);
     const [extraBudget, setExtraBudget] = useState('0');
     const [simulation, setSimulation] = useState(null);
 
@@ -17,6 +19,7 @@ export default function Debts() {
     const load = () => {
         api.get('/debts').then(setDebts).catch((err) => setError(err.message));
         api.get('/debts/summary').then(setSummary).catch(() => {});
+        api.get('/debts/payoff-plan').then(setPlan).catch(() => {});
     };
     useEffect(load, []);
 
@@ -86,6 +89,50 @@ export default function Debts() {
                 </div>
             )}
 
+            {plan && plan.hasDebts && (
+                <section className="card">
+                    <h2>Plano para sair das dividas</h2>
+                    <div className="stat-grid">
+                        <div className="card">
+                            <h3>Sobra mensal media</h3>
+                            <p>R$ {plan.monthlySurplus.toFixed(2)}</p>
+                        </div>
+                        <div className="card">
+                            <h3>Extra sugerido para dividas</h3>
+                            <p>R$ {plan.suggestedExtraPayment.toFixed(2)}/mes</p>
+                        </div>
+                        <div className="card">
+                            <h3>Tempo estimado de quitacao</h3>
+                            <p>{plan.projection.withExtra.monthsToPayoff ? `${plan.projection.withExtra.monthsToPayoff} meses` : '50+ anos'}</p>
+                        </div>
+                        <div className="card">
+                            <h3>Economia em juros</h3>
+                            <p>{plan.projection.interestSaved != null ? `R$ ${plan.projection.interestSaved.toFixed(2)}` : 'Divida cresce sem o extra'}</p>
+                        </div>
+                    </div>
+
+                    <h3>Ordem de prioridade (avalanche)</h3>
+                    <ol>
+                        {plan.priorityOrder.map((d) => (
+                            <li key={d.id}>{d.name} — R$ {d.balance.toFixed(2)} a {(d.rateMonthly * 100).toFixed(2)}% a.m.</li>
+                        ))}
+                    </ol>
+
+                    <h3>Propostas</h3>
+                    <ul>
+                        {plan.recommendations.map((r, i) => (
+                            <li key={i}>{r}</li>
+                        ))}
+                    </ul>
+                </section>
+            )}
+
+            {plan && !plan.hasDebts && (
+                <section className="card">
+                    <p>Nenhuma divida em aberto no momento.</p>
+                </section>
+            )}
+
             <section className="card">
                 <h2>Nova divida</h2>
                 <form onSubmit={addDebt} className="inline-form">
@@ -119,6 +166,14 @@ export default function Debts() {
             </section>
 
             <section className="card">
+                <button type="button" className="btn-link" onClick={() => setShowAdvanced((v) => !v)}>
+                    {showAdvanced ? 'Ocultar simuladores manuais (avancado)' : 'Mostrar simuladores manuais (avancado)'}
+                </button>
+            </section>
+
+            {showAdvanced && (
+            <>
+            <section className="card">
                 <h2>Simulador: Avalanche vs Bola de Neve</h2>
                 <div className="inline-form">
                     <input placeholder="Orcamento extra mensal" type="number" step="0.01" value={extraBudget} onChange={(e) => setExtraBudget(e.target.value)} />
@@ -130,13 +185,13 @@ export default function Debts() {
                         <div className="stat-grid">
                             <div className="card">
                                 <h3>Avalanche</h3>
-                                <p>{simulation.avalanche.monthsToPayoff ?? '50+ anos'} meses para quitar</p>
-                                <p>Juros totais: R$ {simulation.avalanche.totalInterestPaid.toFixed(2)}</p>
+                                <p>{simulation.avalanche.monthsToPayoff ? `${simulation.avalanche.monthsToPayoff} meses para quitar` : '50+ anos para quitar'}</p>
+                                <p>Juros totais: {simulation.avalanche.neverPaysOff ? 'divida nunca para de crescer' : `R$ ${simulation.avalanche.totalInterestPaid.toFixed(2)}`}</p>
                             </div>
                             <div className="card">
                                 <h3>Bola de Neve</h3>
-                                <p>{simulation.snowball.monthsToPayoff ?? '50+ anos'} meses para quitar</p>
-                                <p>Juros totais: R$ {simulation.snowball.totalInterestPaid.toFixed(2)}</p>
+                                <p>{simulation.snowball.monthsToPayoff ? `${simulation.snowball.monthsToPayoff} meses para quitar` : '50+ anos para quitar'}</p>
+                                <p>Juros totais: {simulation.snowball.neverPaysOff ? 'divida nunca para de crescer' : `R$ ${simulation.snowball.totalInterestPaid.toFixed(2)}`}</p>
                             </div>
                         </div>
                         <LineChartCard
@@ -174,6 +229,8 @@ export default function Debts() {
                     </div>
                 )}
             </section>
+            </>
+            )}
         </div>
     );
 }

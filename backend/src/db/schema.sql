@@ -130,6 +130,45 @@ CREATE TABLE IF NOT EXISTS envelope_transactions (
     FOREIGN KEY(envelope_id) REFERENCES envelopes(id)
 );
 
+CREATE TABLE IF NOT EXISTS bills (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL,
+    name TEXT NOT NULL,
+    category_id INTEGER,
+    expected_amount REAL DEFAULT 0,
+    due_day INTEGER NOT NULL,
+    active INTEGER DEFAULT 1,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY(user_id) REFERENCES users(id),
+    FOREIGN KEY(category_id) REFERENCES categories(id)
+);
+
+-- Uma linha por mes (period = 'YYYY-MM') em que a conta foi marcada como paga.
+-- Ausencia de linha para o mes corrente = pendente ou atrasada (calculado em
+-- billsService a partir de due_day vs a data atual).
+CREATE TABLE IF NOT EXISTS bill_payments (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    bill_id INTEGER NOT NULL,
+    period TEXT NOT NULL,
+    amount_paid REAL,
+    paid_date DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY(bill_id) REFERENCES bills(id),
+    UNIQUE(bill_id, period)
+);
+
+-- Mesma ideia de bill_payments, mas para faturas de cartao (que sao virtuais --
+-- calculadas em cardService a partir das transacoes -- entao precisam de uma
+-- tabela propria para guardar so o "paguei essa fatura" por periodo).
+CREATE TABLE IF NOT EXISTS card_invoice_payments (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    card_id INTEGER NOT NULL,
+    period TEXT NOT NULL,
+    amount_paid REAL,
+    paid_date DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY(card_id) REFERENCES credit_cards(id),
+    UNIQUE(card_id, period)
+);
+
 CREATE TABLE IF NOT EXISTS debts (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     user_id INTEGER NOT NULL,

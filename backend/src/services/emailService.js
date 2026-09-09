@@ -113,6 +113,12 @@ export const sendCardDueAlert = (cardName, dueDate, amount) =>
         `A fatura do cartao "${cardName}" no valor de R$ ${amount.toFixed(2)} vence em ${dueDate}.`
     );
 
+export const sendBillDueAlert = (billName, dueDate, amount) =>
+    sendMail(
+        `Conta "${billName}" vence em breve`,
+        `A conta "${billName}" no valor de R$ ${amount.toFixed(2)} vence em ${dueDate} e ainda nao foi marcada como paga.`
+    );
+
 export const sendCardLimitAlert = (usagePercent) =>
     sendMail(
         'Uso de credito acima de 70%',

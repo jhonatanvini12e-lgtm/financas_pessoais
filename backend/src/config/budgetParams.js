@@ -18,6 +18,9 @@ export default {
     // Dias de antecedencia para alertar vencimento de fatura.
     cardDueDateWarningDays: 2,
 
+    // Dias de antecedencia para alertar vencimento de conta a pagar (aluguel, agua, luz etc).
+    billDueDateWarningDays: 2,
+
     // Caixinhas automaticas.
     emergencyFundTargetMonths: 6, // meta = N x media de despesas mensais
     emergencyFundBuildupMonths: 12, // prazo sugerido para juntar a meta

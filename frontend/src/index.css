@@ -928,6 +928,7 @@ a {
 }
 
 .badge-status {
+  display: inline-block;
   align-self: flex-start;
   font-size: 11px;
   font-weight: 600;
@@ -940,6 +941,10 @@ a {
 .status-connected { background: var(--positive-soft); color: var(--positive); }
 .status-error { background: var(--negative-soft); color: var(--negative); }
 .status-disconnected { background: var(--neutral-soft); color: var(--text-muted); }
+
+.status-paid { background: var(--positive-soft); color: var(--positive); }
+.status-pending { background: var(--warning-soft); color: var(--warning); }
+.status-late { background: var(--negative-soft); color: var(--negative); }
 
 /* ---------- Wizard ---------- */
 

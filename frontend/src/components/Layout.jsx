@@ -16,6 +16,7 @@ const NAV_ITEMS = [
     { to: '/budget', label: 'Orcamento' },
     { to: '/accounts', label: 'Contas e Cartoes' },
     { to: '/invoice-export', label: 'Exportacao de Fatura' },
+    { to: '/bills', label: 'Contas a Pagar' },
     { to: '/debts', label: 'Dividas' },
     { to: '/caixinhas-investimentos', label: 'Caixinhas e Investimentos' },
     { to: '/turning-point', label: 'Ponto de Virada' },

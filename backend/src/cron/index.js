@@ -3,6 +3,7 @@ import db from '../db/index.js';
 import { runBackup } from '../services/backupService.js';
 import { runCardChecks } from '../services/cardService.js';
 import { checkBudgetAlerts } from '../services/budgetEngine.js';
+import { runBillChecks } from '../services/billsService.js';
 
 function allUserIds() {
     return db.prepare('SELECT id FROM users').all().map((u) => u.id);
@@ -38,5 +39,16 @@ export function startCronJobs() {
         }
     });
 
-    console.log('Jobs agendados: backup diario, checagem de cartoes/orcamento.');
+    // Verificacao diaria de contas a pagar, as 08:10.
+    cron.schedule('10 8 * * *', () => {
+        for (const userId of allUserIds()) {
+            try {
+                runBillChecks(userId);
+            } catch (err) {
+                console.error(`Erro ao checar contas do usuario ${userId}:`, err.message);
+            }
+        }
+    });
+
+    console.log('Jobs agendados: backup diario, checagem de cartoes/orcamento/contas.');
 }

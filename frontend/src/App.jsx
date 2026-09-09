@@ -11,6 +11,7 @@ import QuickAdd from './pages/QuickAdd.jsx';
 import Categories from './pages/Categories.jsx';
 import Budget from './pages/Budget.jsx';
 import Debts from './pages/Debts.jsx';
+import Bills from './pages/Bills.jsx';
 import CaixinhasInvestimentos from './pages/CaixinhasInvestimentos.jsx';
 import TurningPoint from './pages/TurningPoint.jsx';
 import Intelligence from './pages/Intelligence.jsx';
@@ -35,6 +36,7 @@ function App() {
                 <Route path="/categories" element={<Categories />} />
                 <Route path="/budget" element={<Budget />} />
                 <Route path="/debts" element={<Debts />} />
+                <Route path="/bills" element={<Bills />} />
                 <Route path="/caixinhas-investimentos" element={<CaixinhasInvestimentos />} />
                 <Route path="/envelopes" element={<Navigate to="/caixinhas-investimentos" replace />} />
                 <Route path="/investments" element={<Navigate to="/caixinhas-investimentos" replace />} />

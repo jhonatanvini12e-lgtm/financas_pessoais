@@ -1,6 +1,6 @@
 import express from 'express';
 import db from '../db/index.js';
-import { compareStrategies, getDebtSummary, simulateRenegotiation } from '../services/debtCalculator.js';
+import { compareStrategies, getDebtPayoffPlan, getDebtSummary, simulateRenegotiation } from '../services/debtCalculator.js';
 
 const router = express.Router();
 
@@ -10,6 +10,10 @@ router.get('/', (req, res) => {
 
 router.get('/summary', (req, res) => {
     res.json(getDebtSummary(req.user.id));
+});
+
+router.get('/payoff-plan', (req, res) => {
+    res.json(getDebtPayoffPlan(req.user.id));
 });
 
 router.get('/simulate', (req, res) => {
