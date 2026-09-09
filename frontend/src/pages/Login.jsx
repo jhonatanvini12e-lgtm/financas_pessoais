@@ -1,6 +1,8 @@
 import { useState } from 'react';
 import { api } from '../api/client.js';
 import { useAuth } from '../context/AuthContext.jsx';
+import Logo from '../components/Logo.jsx';
+import ThemeToggle from '../components/ThemeToggle.jsx';
 
 export default function Login() {
     const { login } = useAuth();
@@ -42,6 +44,8 @@ export default function Login() {
 
     return (
         <div className="glass-panel">
+            <ThemeToggle className="login-theme-toggle" />
+            <Logo size={40} wordmark="Financas" />
             <h2>{step === 1 ? 'Acesso Seguro' : 'Verificacao 2FA'}</h2>
             <p>
                 {step === 1

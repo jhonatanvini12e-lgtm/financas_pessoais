@@ -6,6 +6,7 @@ import { useAlertsPolling } from '../hooks/useAlertsPolling.js';
 import { requestNotificationPermission } from '../utils/notifications.js';
 import ReauthModal from './ReauthModal.jsx';
 import Logo from './Logo.jsx';
+import ThemeToggle from './ThemeToggle.jsx';
 
 const NAV_ITEMS = [
     { to: '/', label: 'Dashboard', end: true },
@@ -74,6 +75,7 @@ export default function Layout() {
                         </NavLink>
                     </div>
                     <div className="topbar-user">
+                        <ThemeToggle />
                         <span>{user?.username}</span>
                         <button className="btn-link" onClick={logout}>Sair</button>
                     </div>

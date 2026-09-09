@@ -1,13 +1,13 @@
 // Selo da marca: barras em ascensao (o mesmo elemento do dashboard) com um
 // no de destaque no topo da barra mais alta. Ver design em src/index.css
-// (--accent-cyan / --accent-purple) -- a marca nao usa nenhuma cor nova.
+// (--accent / --accent-blue) -- a marca usa a mesma paleta do restante do app.
 export function LogoMark({ size = 32 }) {
     return (
         <svg width={size} height={size} viewBox="0 0 64 64" fill="none" role="img" aria-label="Financas Pessoais">
             <defs>
                 <linearGradient id="logo-mark-gradient" x1="0%" y1="0%" x2="100%" y2="100%">
-                    <stop offset="0%" stopColor="#06b6d4" />
-                    <stop offset="100%" stopColor="#8b5cf6" />
+                    <stop offset="0%" stopColor="#10b981" />
+                    <stop offset="100%" stopColor="#3b82f6" />
                 </linearGradient>
             </defs>
             <rect width="64" height="64" rx="16" fill="url(#logo-mark-gradient)" />

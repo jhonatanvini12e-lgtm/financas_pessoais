@@ -21,7 +21,7 @@ export default function Dashboard() {
             <h1>Dashboard</h1>
 
             <div className="stat-grid">
-                <StatCard label="Saldo em contas" value={currency(data.totalBalance)} />
+                <StatCard label="Saldo em contas" value={currency(data.totalBalance)} tone="hero" />
                 <StatCard
                     label="Uso de credito"
                     value={`${(data.creditUsage.usageRatio * 100).toFixed(0)}%`}
