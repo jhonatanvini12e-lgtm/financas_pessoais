@@ -354,6 +354,27 @@ a {
   border-color: var(--border-glass-strong);
 }
 
+.hide-values-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  background: none;
+  border: 1px solid var(--border-glass);
+  border-radius: 999px;
+  color: var(--text-muted);
+  font-size: 13px;
+  font-family: inherit;
+  cursor: pointer;
+  transition: color 0.15s var(--ease), background 0.15s var(--ease), border-color 0.15s var(--ease);
+}
+
+.hide-values-toggle:hover {
+  color: var(--accent-blue);
+  background: var(--hairline-fill-strong);
+  border-color: var(--border-glass-strong);
+}
+
 .row-actions {
   display: flex;
   align-items: center;
@@ -499,6 +520,18 @@ a {
   font-weight: 700;
   letter-spacing: -0.015em;
   margin-bottom: 22px;
+}
+
+.page-header-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 22px;
+}
+
+.page-header-row h1 {
+  margin-bottom: 0;
 }
 
 .page h2 {

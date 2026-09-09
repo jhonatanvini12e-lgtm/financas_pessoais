@@ -1,6 +1,7 @@
 import jwt from 'jsonwebtoken';
 import db from '../db/index.js';
 import budgetParams from '../config/budgetParams.js';
+import { JWT_SECRET, AUTH_COOKIE_NAME } from '../config/jwt.js';
 
 const INACTIVITY_MS = budgetParams.inactivityTimeoutMinutes * 60 * 1000;
 
@@ -8,15 +9,14 @@ const INACTIVITY_MS = budgetParams.inactivityTimeoutMinutes * 60 * 1000;
 const parseSqliteUtc = (value) => new Date(value.replace(' ', 'T') + 'Z').getTime();
 
 export function authMiddleware(req, res, next) {
-    const header = req.headers.authorization || '';
-    const token = header.startsWith('Bearer ') ? header.slice(7) : null;
+    const token = req.cookies?.[AUTH_COOKIE_NAME] || null;
     if (!token) {
         return res.status(401).json({ error: 'Token ausente', reason: 'UNAUTHORIZED' });
     }
 
     let payload;
     try {
-        payload = jwt.verify(token, process.env.JWT_SECRET || 'secret_jwt_key');
+        payload = jwt.verify(token, JWT_SECRET);
     } catch {
         return res.status(401).json({ error: 'Token invalido ou expirado', reason: 'UNAUTHORIZED' });
     }

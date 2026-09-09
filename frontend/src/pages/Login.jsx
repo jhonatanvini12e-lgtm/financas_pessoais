@@ -35,8 +35,8 @@ export default function Login() {
         e.preventDefault();
         setError('');
         try {
-            const data = await api.post('/auth/verify-2fa', { userId, code });
-            login(data.token);
+            await api.post('/auth/verify-2fa', { userId, code });
+            await login();
         } catch (err) {
             setError(err.message);
         }

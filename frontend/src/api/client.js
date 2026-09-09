@@ -5,19 +5,23 @@ export function setSessionInvalidHandler(fn) {
     onSessionInvalid = fn;
 }
 
-function getToken() {
-    return localStorage.getItem('token');
+function getCsrfToken() {
+    const match = document.cookie.match(/(?:^|;\s*)csrfToken=([^;]*)/);
+    return match ? decodeURIComponent(match[1]) : null;
 }
 
 async function request(path, { method = 'GET', body, isForm = false } = {}) {
     const headers = {};
-    const token = getToken();
-    if (token) headers.Authorization = `Bearer ${token}`;
     if (!isForm && body) headers['Content-Type'] = 'application/json';
+    if (method !== 'GET') {
+        const csrfToken = getCsrfToken();
+        if (csrfToken) headers['X-CSRF-Token'] = csrfToken;
+    }
 
     const res = await fetch(`${API_BASE}${path}`, {
         method,
         headers,
+        credentials: 'include',
         body: isForm ? body : body ? JSON.stringify(body) : undefined,
     });
 

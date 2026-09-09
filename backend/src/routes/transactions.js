@@ -3,12 +3,54 @@ import multer from 'multer';
 import crypto from 'node:crypto';
 import db from '../db/index.js';
 import { categorize, buildCategoryLearningMap } from '../services/categorizationEngine.js';
-import { parseStatementFile } from '../services/statementImport/index.js';
+import { parseStatementFile, SUPPORTED_STATEMENT_EXTENSIONS } from '../services/statementImport/index.js';
 import { addMonths } from '../services/statementImport/columnMapper.js';
 import { checkBudgetAlerts } from '../services/budgetEngine.js';
 
 const router = express.Router();
-const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } });
+
+// Mimetypes aceitos por extensao. OFX/CSV/XLS nao tem um mimetype padronizado
+// entre browsers/SO (frequentemente chegam como text/plain ou
+// application/octet-stream), por isso a lista e' permissiva nesses casos --
+// a extensao continua sendo o filtro principal, o mimetype so pega
+// descompassos grosseiros (ex: enviar um .exe renomeado como .csv).
+const ALLOWED_MIME_TYPES_BY_EXTENSION = {
+    '.ofx': ['application/x-ofx', 'application/ofx', 'application/vnd.intu.qfx', 'text/plain', 'application/octet-stream'],
+    '.csv': ['text/csv', 'application/vnd.ms-excel', 'text/plain', 'application/octet-stream'],
+    '.xlsx': [
+        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        'application/zip',
+        'application/octet-stream',
+    ],
+    '.xls': ['application/vnd.ms-excel', 'application/octet-stream'],
+    '.pdf': ['application/pdf'],
+};
+
+function statementFileFilter(req, file, cb) {
+    const ext = `.${(file.originalname.split('.').pop() || '').toLowerCase()}`;
+    const allowedMimeTypes = ALLOWED_MIME_TYPES_BY_EXTENSION[ext];
+
+    if (!allowedMimeTypes) {
+        return cb(new Error(`Formato de arquivo nao suportado. Use ${SUPPORTED_STATEMENT_EXTENSIONS.join(', ')}.`));
+    }
+    if (!allowedMimeTypes.includes(file.mimetype)) {
+        return cb(new Error('Tipo do arquivo enviado nao corresponde a extensao informada.'));
+    }
+    cb(null, true);
+}
+
+const upload = multer({
+    storage: multer.memoryStorage(),
+    limits: { fileSize: 10 * 1024 * 1024 },
+    fileFilter: statementFileFilter,
+});
+
+function uploadStatementFile(req, res, next) {
+    upload.single('file')(req, res, (err) => {
+        if (err) return res.status(400).json({ error: err.message });
+        next();
+    });
+}
 
 router.get('/', (req, res) => {
     const { start, end, category_id, account_id, card_id } = req.query;
@@ -59,9 +101,38 @@ router.get('/compare', (req, res) => {
     res.json({ months, monthly, byCategory });
 });
 
+// Limites de plausibilidade da data de um lancamento manual -- pegam erro de
+// digitacao grosseiro (ex: ano trocado) sem incomodar lancamentos legitimos
+// de fatura antiga ou conta agendada com alguns meses de antecedencia.
+const TRANSACTION_DATE_MAX_YEARS_PAST = 10;
+const TRANSACTION_DATE_MAX_MONTHS_AHEAD = 12;
+
+function isPlausibleTransactionDate(dateStr) {
+    const parsed = new Date(`${dateStr}T00:00:00Z`);
+    if (Number.isNaN(parsed.getTime())) return false;
+
+    const now = new Date();
+    const minDate = new Date(now);
+    minDate.setUTCFullYear(minDate.getUTCFullYear() - TRANSACTION_DATE_MAX_YEARS_PAST);
+    const maxDate = new Date(now);
+    maxDate.setUTCMonth(maxDate.getUTCMonth() + TRANSACTION_DATE_MAX_MONTHS_AHEAD);
+
+    return parsed >= minDate && parsed <= maxDate;
+}
+
 router.post('/', (req, res) => {
     const { account_id, card_id, category_id, amount, date, description, installments } = req.body;
     if (amount == null || !date) return res.status(400).json({ error: 'amount e date sao obrigatorios' });
+
+    const numericAmount = Number(amount);
+    if (!Number.isFinite(numericAmount) || numericAmount === 0) {
+        return res.status(400).json({ error: 'amount deve ser um numero diferente de zero' });
+    }
+    if (!isPlausibleTransactionDate(date)) {
+        return res.status(400).json({
+            error: `date deve estar entre ${TRANSACTION_DATE_MAX_YEARS_PAST} anos no passado e ${TRANSACTION_DATE_MAX_MONTHS_AHEAD} meses no futuro`,
+        });
+    }
 
     const resolvedCategory = category_id ?? categorize(req.user.id, description);
     const totalInstallments = Math.min(Math.max(Number(installments) || 1, 1), 120);
@@ -82,7 +153,7 @@ router.post('/', (req, res) => {
             account_id || null,
             card_id || null,
             resolvedCategory || null,
-            amount,
+            numericAmount,
             installmentDate,
             installmentDescription,
             installmentGroup,
@@ -96,6 +167,12 @@ router.post('/', (req, res) => {
     const created = createdIds.map((id) => db.prepare('SELECT * FROM transactions WHERE id = ?').get(id));
     res.status(201).json(totalInstallments > 1 ? created : created[0]);
 });
+
+function recordTransactionHistory(userId, action, before, after) {
+    db.prepare(
+        `INSERT INTO transaction_history (transaction_id, user_id, action, before_data, after_data) VALUES (?, ?, ?, ?, ?)`
+    ).run(before.id, userId, action, JSON.stringify(before), after ? JSON.stringify(after) : null);
+}
 
 router.put('/:id', (req, res) => {
     const txn = db.prepare('SELECT * FROM transactions WHERE id = ? AND user_id = ?').get(req.params.id, req.user.id);
@@ -115,12 +192,17 @@ router.put('/:id', (req, res) => {
         status ?? txn.status,
         txn.id
     );
-    res.json(db.prepare('SELECT * FROM transactions WHERE id = ?').get(txn.id));
+    const updated = db.prepare('SELECT * FROM transactions WHERE id = ?').get(txn.id);
+    recordTransactionHistory(req.user.id, 'UPDATE', txn, updated);
+    res.json(updated);
 });
 
 router.delete('/:id', (req, res) => {
-    const result = db.prepare('DELETE FROM transactions WHERE id = ? AND user_id = ?').run(req.params.id, req.user.id);
-    if (result.changes === 0) return res.status(404).json({ error: 'Transacao nao encontrada' });
+    const txn = db.prepare('SELECT * FROM transactions WHERE id = ? AND user_id = ?').get(req.params.id, req.user.id);
+    if (!txn) return res.status(404).json({ error: 'Transacao nao encontrada' });
+
+    db.prepare('DELETE FROM transactions WHERE id = ? AND user_id = ?').run(req.params.id, req.user.id);
+    recordTransactionHistory(req.user.id, 'DELETE', txn, null);
     res.json({ ok: true });
 });
 
@@ -128,19 +210,31 @@ router.delete('/:id', (req, res) => {
 // extrato (.ofx, .csv, .xlsx ou .pdf), ja que nao ha sync automatico com
 // banco. PDF e interpretado por IA (ver services/statementImport/pdfParser.js),
 // os demais formatos por parsers proprios.
-router.post('/import-statement', upload.single('file'), async (req, res) => {
+//
+// Importacao em duas etapas: /import-statement/preview extrai os lancamentos
+// do arquivo e devolve pro usuario revisar/editar no front (data, descricao,
+// valor, categoria) sem gravar nada; /import-statement/commit recebe essa
+// lista (ja editada) e grava de fato. Isso evita que um erro da IA (PDF) ou
+// do parser vá direto pro banco sem o usuario conferir.
+router.post('/import-statement/preview', uploadStatementFile, async (req, res) => {
     if (!req.file) return res.status(400).json({ error: 'Arquivo e obrigatorio' });
-    const { account_id, card_id, password } = req.body;
+    const { password } = req.body;
 
     const categories = db.prepare('SELECT id, name FROM categories WHERE user_id = ?').all(req.user.id);
 
     let parsed;
+    let warnings;
     try {
         // Passa os nomes das categorias do usuario para que, no caso de PDF, a
         // mesma IA que le a fatura ja sugira uma categoria por lancamento com
         // base na descricao (ex: "LONDRISUL TRANSPORTE C" -> "Transporte").
         // `password` so e usado no caminho do PDF, para faturas protegidas.
-        parsed = await parseStatementFile(req.file.originalname, req.file.buffer, categories.map((c) => c.name), password);
+        ({ transactions: parsed, warnings } = await parseStatementFile(
+            req.file.originalname,
+            req.file.buffer,
+            categories.map((c) => c.name),
+            password
+        ));
     } catch (err) {
         // PDF_PASSWORD_REQUIRED/PDF_PASSWORD_INCORRECT (ver pdfParser.js) usam
         // 422 em vez de 400 para o front distinguir "precisa de senha" de um
@@ -152,19 +246,63 @@ router.post('/import-statement', upload.single('file'), async (req, res) => {
 
     const categoryIdByName = new Map(categories.map((c) => [c.name.trim().toLowerCase(), c.id]));
 
+    // Construido uma vez para o lote inteiro: aprende com o historico ja
+    // categorizado do usuario em vez de re-escanear a tabela a cada linha.
+    const learningMap = buildCategoryLearningMap(req.user.id);
+
+    const preview = parsed.map((txn) => {
+        // Prioridade: (1) historico ja categorizado pelo usuario, (2) keywords
+        // cadastradas manualmente, (3) sugestao da IA que leu o PDF a partir
+        // da descricao -- fallback usado sobretudo quando a descricao crua do
+        // extrato nao bate com nenhuma keyword. So' uma sugestao inicial: o
+        // usuario ainda pode trocar a categoria na tela de revisao.
+        let categoryId = categorize(req.user.id, txn.description, learningMap);
+        if (categoryId == null && txn.categoryNameSuggestion) {
+            categoryId = categoryIdByName.get(txn.categoryNameSuggestion.trim().toLowerCase()) ?? null;
+        }
+
+        const duplicate = Boolean(
+            txn.fitid &&
+                db.prepare('SELECT id FROM transactions WHERE user_id = ? AND external_fitid = ?').get(req.user.id, txn.fitid)
+        );
+
+        return {
+            fitid: txn.fitid || null,
+            date: txn.date,
+            description: txn.description,
+            amount: txn.amount,
+            category_id: categoryId,
+            installment_number: txn.installmentNumber,
+            installment_total: txn.installmentTotal,
+            duplicate,
+        };
+    });
+
+    res.json({ filename: req.file.originalname, transactions: preview, warnings });
+});
+
+router.post('/import-statement/commit', (req, res) => {
+    const { account_id, card_id, filename, transactions } = req.body;
+    if (!Array.isArray(transactions) || transactions.length === 0) {
+        return res.status(400).json({ error: 'Nenhum lancamento para importar' });
+    }
+
     const insertTxn = db.prepare(
         `INSERT INTO transactions (user_id, account_id, card_id, category_id, amount, date, description, status, external_fitid, source, installment_group, installment_number, installment_total)
          VALUES (?, ?, ?, ?, ?, ?, ?, 'CLEARED', ?, 'STATEMENT_IMPORT', ?, ?, ?)`
     );
 
-    // Construido uma vez para o lote inteiro: aprende com o historico ja
-    // categorizado do usuario em vez de re-escanear a tabela a cada linha.
-    const learningMap = buildCategoryLearningMap(req.user.id);
-
     let imported = 0;
     let skipped = 0;
     let generatedInstallments = 0;
-    for (const txn of parsed) {
+    for (const txn of transactions) {
+        const amount = Number(txn.amount);
+        const description = String(txn.description ?? '').trim();
+        if (!txn.date || !Number.isFinite(amount) || amount === 0 || !description) { skipped += 1; continue; }
+
+        // Revalida duplicidade na hora de gravar (o preview so' checou no
+        // momento em que o arquivo foi lido -- outra importacao pode ter
+        // inserido o mesmo lancamento nesse intervalo).
         if (txn.fitid) {
             const exists = db
                 .prepare('SELECT id FROM transactions WHERE user_id = ? AND external_fitid = ?')
@@ -175,29 +313,21 @@ router.post('/import-statement', upload.single('file'), async (req, res) => {
         // Lancamento parcelado (ex: "3/10" na fatura): a linha do extrato so
         // mostra a parcela atual, entao geramos aqui as parcelas restantes
         // com a data projetada mes a mes (mesma logica de POST /transactions).
-        const isInstallment = Number(txn.installmentTotal) > 1 && Number(txn.installmentNumber) >= 1;
-        const startNumber = isInstallment ? Number(txn.installmentNumber) : 1;
-        const totalInstallments = isInstallment ? Number(txn.installmentTotal) : 1;
+        const isInstallment = Number(txn.installment_total) > 1 && Number(txn.installment_number) >= 1;
+        const startNumber = isInstallment ? Number(txn.installment_number) : 1;
+        const totalInstallments = isInstallment ? Number(txn.installment_total) : 1;
         const installmentGroup = isInstallment ? crypto.randomUUID() : null;
-
-        // Prioridade: (1) historico ja categorizado pelo usuario, (2) keywords
-        // cadastradas manualmente, (3) sugestao da IA que leu o PDF a partir
-        // da descricao -- fallback usado sobretudo quando a descricao crua do
-        // extrato nao bate com nenhuma keyword.
-        let categoryId = categorize(req.user.id, txn.description, learningMap);
-        if (categoryId == null && txn.categoryNameSuggestion) {
-            categoryId = categoryIdByName.get(txn.categoryNameSuggestion.trim().toLowerCase()) ?? null;
-        }
+        const categoryId = txn.category_id || null;
 
         for (let num = startNumber; num <= totalInstallments; num += 1) {
             const installmentDate = num === startNumber ? txn.date : addMonths(txn.date, num - startNumber);
-            const installmentDescription = isInstallment ? `${txn.description} (${num}/${totalInstallments})` : txn.description;
+            const installmentDescription = isInstallment ? `${description} (${num}/${totalInstallments})` : description;
             insertTxn.run(
                 req.user.id,
                 account_id || null,
                 card_id || null,
                 categoryId,
-                txn.amount,
+                amount,
                 installmentDate,
                 installmentDescription,
                 num === startNumber ? txn.fitid || null : null,
@@ -212,10 +342,10 @@ router.post('/import-statement', upload.single('file'), async (req, res) => {
 
     db.prepare(
         'INSERT INTO ofx_imports (user_id, account_id, card_id, filename, imported_count, skipped_count) VALUES (?, ?, ?, ?, ?, ?)'
-    ).run(req.user.id, account_id || null, card_id || null, req.file.originalname, imported + generatedInstallments, skipped);
+    ).run(req.user.id, account_id || null, card_id || null, filename || 'importacao', imported + generatedInstallments, skipped);
 
     checkBudgetAlerts(req.user.id);
-    res.json({ imported, skipped, generatedInstallments, total: parsed.length });
+    res.json({ imported, skipped, generatedInstallments, total: transactions.length });
 });
 
 // Aplica o aprendizado por historico (ver categorizationEngine.js) aos

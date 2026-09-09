@@ -2,12 +2,14 @@ import { useEffect, useState } from 'react';
 import { api } from '../api/client.js';
 import StatCard from '../components/StatCard.jsx';
 import ProgressBar from '../components/ProgressBar.jsx';
-
-const currency = (v) => `R$ ${Number(v || 0).toFixed(2)}`;
+import HideValuesToggle from '../components/HideValuesToggle.jsx';
+import { usePrivacy } from '../context/PrivacyContext.jsx';
 
 export default function Dashboard() {
     const [data, setData] = useState(null);
     const [error, setError] = useState('');
+    const { hideValues } = usePrivacy();
+    const currency = (v) => (hideValues ? '••••••' : `R$ ${Number(v || 0).toFixed(2)}`);
 
     useEffect(() => {
         api.get('/dashboard').then(setData).catch((err) => setError(err.message));
@@ -18,7 +20,10 @@ export default function Dashboard() {
 
     return (
         <div className="page">
-            <h1>Dashboard</h1>
+            <div className="page-header-row">
+                <h1>Dashboard</h1>
+                <HideValuesToggle />
+            </div>
 
             <div className="stat-grid">
                 <StatCard label="Saldo em contas" value={currency(data.totalBalance)} tone="hero" />

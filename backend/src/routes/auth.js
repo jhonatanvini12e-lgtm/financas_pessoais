@@ -6,14 +6,19 @@ import db from '../db/index.js';
 import { authMiddleware } from '../middleware/auth.js';
 import { send2FACode, sendNewDeviceAlert, sendInactivityReauthCode } from '../services/emailService.js';
 import budgetParams from '../config/budgetParams.js';
+import {
+    JWT_SECRET,
+    JWT_EXPIRES_IN,
+    AUTH_COOKIE_NAME,
+    authCookieOptions,
+    clearAuthCookieOptions,
+} from '../config/jwt.js';
+import { CSRF_COOKIE_NAME, generateCsrfToken } from '../middleware/csrf.js';
 
 const router = express.Router();
 
 // codigo -> { userId, expires, reason }
 const twoFactorStore = new Map();
-
-const JWT_SECRET = process.env.JWT_SECRET || 'secret_jwt_key';
-const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || '30m';
 
 const TWO_FACTOR_CODE_EXPIRY_MS = budgetParams.twoFactorCodeExpiryMinutes * 60000;
 
@@ -56,12 +61,14 @@ router.post('/login', async (req, res) => {
 router.post('/request-reauth', (req, res) => {
     const { userId } = req.body;
     const user = db.prepare('SELECT * FROM users WHERE id = ?').get(userId);
-    if (!user) return res.status(404).json({ error: 'Usuario nao encontrado' });
 
-    const code = issueTwoFactorCode(user.id, deviceFingerprint(req));
-    sendInactivityReauthCode(user.email, code);
+    if (user) {
+        const code = issueTwoFactorCode(user.id, deviceFingerprint(req));
+        sendInactivityReauthCode(user.email, code);
+    }
 
-    res.json({ message: 'Codigo de reautenticacao enviado.' });
+    // Resposta identica exista ou nao o usuario, para nao permitir enumeracao de userId.
+    res.json({ message: 'Se o usuario existir, um codigo de reautenticacao foi enviado.' });
 });
 
 router.post('/verify-2fa', (req, res) => {
@@ -88,7 +95,12 @@ router.post('/verify-2fa', (req, res) => {
     db.prepare('UPDATE users SET last_login = CURRENT_TIMESTAMP WHERE id = ?').run(userId);
 
     const token = jwt.sign({ jti }, JWT_SECRET, { expiresIn: JWT_EXPIRES_IN });
-    res.json({ token, message: 'Autenticado com sucesso' });
+    const cookieOptions = authCookieOptions();
+    res.cookie(AUTH_COOKIE_NAME, token, cookieOptions);
+    // Cookie CSRF precisa ser legivel por JS (nao-httpOnly) para o front devolver
+    // o valor num header customizado a cada request que altera estado.
+    res.cookie(CSRF_COOKIE_NAME, generateCsrfToken(), { ...cookieOptions, httpOnly: false });
+    res.json({ message: 'Autenticado com sucesso' });
 });
 
 router.get('/me', authMiddleware, (req, res) => {
@@ -102,6 +114,8 @@ router.post('/activity-ping', authMiddleware, (req, res) => {
 
 router.post('/logout', authMiddleware, (req, res) => {
     db.prepare('UPDATE sessions SET revoked = 1 WHERE id = ?').run(req.user.sessionId);
+    res.clearCookie(AUTH_COOKIE_NAME, clearAuthCookieOptions());
+    res.clearCookie(CSRF_COOKIE_NAME, { ...clearAuthCookieOptions(), httpOnly: false });
     res.json({ ok: true });
 });
 

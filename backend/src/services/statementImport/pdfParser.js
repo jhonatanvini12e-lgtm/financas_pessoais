@@ -206,26 +206,54 @@ function parseItems(raw, providerLabel) {
     return items;
 }
 
+// Extratos/faturas costumam trazer o numero completo do cartao e o CPF do
+// titular no texto -- esses dados nao tem relacao com a extracao dos
+// lancamentos, entao sao mascarados antes de sair do backend para a IA.
+// Sequencia de 13-19 digitos (com espaco/ponto/traço opcional entre eles) e
+// tratada como "parece numero de cartao"; o guard de 13+ digitos evita
+// mascarar por engano numeros curtos comuns em extratos (datas, valores,
+// contador de parcela).
+const CARD_NUMBER_PATTERN = /\b(?:\d[ .-]?){12,18}\d\b/g;
+const CPF_PATTERN = /\b\d{3}\.?\d{3}\.?\d{3}-?\d{2}\b/g;
+
+function maskCardNumber(match) {
+    const digits = match.replace(/\D/g, '');
+    if (digits.length < 13) return match;
+    return `**** **** **** ${digits.slice(-4)}`;
+}
+
+function maskSensitiveData(text) {
+    return text.replace(CARD_NUMBER_PATTERN, maskCardNumber).replace(CPF_PATTERN, '***.***.***-**');
+}
+
+const MAX_STATEMENT_CHARS = 60000;
+
 async function askAIForTransactions(statementText, categoryNames) {
     assertAnyApiKey();
 
+    const masked = maskSensitiveData(statementText);
+
     // Fatura de cartao raramente passa de algumas paginas; limitamos por
-    // seguranca para nao estourar o limite de tokens do free tier.
-    const truncated = statementText.slice(0, 60000);
+    // seguranca para nao estourar o limite de tokens do free tier. Quando o
+    // texto e maior que o limite, o restante da fatura simplesmente nao e
+    // visto pela IA -- por isso o chamador precisa saber que houve corte
+    // (ver `truncated` no retorno) para poder avisar o usuario.
+    const textForAI = masked.slice(0, MAX_STATEMENT_CHARS);
+    const wasTruncated = masked.length > MAX_STATEMENT_CHARS;
     const prompt = buildPrompt(categoryNames);
 
     if (process.env.GEMINI_API_KEY) {
         try {
-            const raw = await callGemini(truncated, prompt);
-            return parseItems(raw, 'Gemini');
+            const raw = await callGemini(textForAI, prompt);
+            return { items: parseItems(raw, 'Gemini'), truncated: wasTruncated };
         } catch (geminiError) {
             if (!process.env.GROQ_API_KEY) {
                 throw new Error(`Falha ao ler o PDF com IA (Gemini): ${geminiError.message}`);
             }
             console.warn(`Gemini falhou ao ler PDF, tentando backup (Groq): ${geminiError.message}`);
             try {
-                const raw = await callGroq(truncated, prompt);
-                return parseItems(raw, 'Groq, backup');
+                const raw = await callGroq(textForAI, prompt);
+                return { items: parseItems(raw, 'Groq, backup'), truncated: wasTruncated };
             } catch (groqError) {
                 throw new Error(`Falha ao ler o PDF: Gemini (${geminiError.message}) e o backup Groq (${groqError.message}) falharam.`);
             }
@@ -233,11 +261,44 @@ async function askAIForTransactions(statementText, categoryNames) {
     }
 
     try {
-        const raw = await callGroq(truncated, prompt);
-        return parseItems(raw, 'Groq');
+        const raw = await callGroq(textForAI, prompt);
+        return { items: parseItems(raw, 'Groq'), truncated: wasTruncated };
     } catch (groqError) {
         throw new Error(`Falha ao ler o PDF com IA (Groq): ${groqError.message}`);
     }
+}
+
+// Procura um "total da fatura"/"total a pagar" identificavel no texto para
+// servir de checagem de sanidade contra a soma dos lancamentos que a IA
+// extraiu (ver checkInvoiceTotalDivergence). So aceita a primeira ocorrencia
+// -- suficiente pro cabecalho/resumo tipico de fatura, onde o total aparece
+// perto do rotulo.
+const INVOICE_TOTAL_PATTERN = /(total\s+(?:desta\s+|da\s+)?fatura|total\s+a\s+pagar|valor\s+total)[\s\S]{0,20}?(-?\s*R\$\s*[\d.,]+|-?\d[\d.,]*\d)/i;
+
+function extractInvoiceTotal(text) {
+    const match = text.match(INVOICE_TOTAL_PATTERN);
+    if (!match) return null;
+    const value = parseAmount(match[2]);
+    return Number.isFinite(value) && value !== 0 ? Math.abs(value) : null;
+}
+
+// Aviso (nao bloqueia a importacao) quando o total identificado na fatura
+// diverge significativamente da soma dos lancamentos extraidos -- sinal de
+// que a IA pode ter alucinado um valor ou deixado de extrair algum
+// lancamento. Tolerancia relativa (10%) com piso absoluto (R$5) pra nao
+// disparar por causa de arredondamento em faturas pequenas.
+const INVOICE_TOTAL_DIVERGENCE_RATIO = 0.1;
+const INVOICE_TOTAL_DIVERGENCE_MIN_ABS = 5;
+
+function checkInvoiceTotalDivergence(invoiceTotal, transactions) {
+    if (invoiceTotal == null) return null;
+
+    const extractedTotal = Math.abs(transactions.reduce((sum, txn) => sum + txn.amount, 0));
+    const diff = Math.abs(extractedTotal - invoiceTotal);
+    const tolerance = Math.max(INVOICE_TOTAL_DIVERGENCE_MIN_ABS, invoiceTotal * INVOICE_TOTAL_DIVERGENCE_RATIO);
+    if (diff <= tolerance) return null;
+
+    return `O total da fatura identificado no PDF (R$ ${invoiceTotal.toFixed(2)}) diverge da soma dos lancamentos extraidos (R$ ${extractedTotal.toFixed(2)}). Confira os valores antes de importar -- a IA pode ter deixado de extrair algum lancamento ou alucinado um valor.`;
 }
 
 export async function parsePdf(buffer, categoryNames = [], password) {
@@ -246,9 +307,9 @@ export async function parsePdf(buffer, categoryNames = [], password) {
         throw new Error('Nao foi possivel extrair texto do PDF (arquivo pode ser uma imagem escaneada).');
     }
 
-    const items = await askAIForTransactions(text, categoryNames);
+    const { items, truncated } = await askAIForTransactions(text, categoryNames);
 
-    return items
+    const transactions = items
         .map((item) => {
             const rawDescription = String(item.description ?? '').trim() || 'Lancamento importado';
             const installment = extractInstallmentInfo(rawDescription);
@@ -263,4 +324,15 @@ export async function parsePdf(buffer, categoryNames = [], password) {
             };
         })
         .filter((txn) => txn.date && Number.isFinite(txn.amount) && txn.amount !== 0);
+
+    const warnings = [];
+    if (truncated) {
+        warnings.push(
+            `O texto do PDF passou de ${MAX_STATEMENT_CHARS.toLocaleString('pt-BR')} caracteres e foi cortado antes de ir para a IA -- o extrato pode estar incompleto. Confira se todos os lancamentos da fatura foram importados.`
+        );
+    }
+    const divergenceWarning = checkInvoiceTotalDivergence(extractInvoiceTotal(text), transactions);
+    if (divergenceWarning) warnings.push(divergenceWarning);
+
+    return { transactions, warnings };
 }

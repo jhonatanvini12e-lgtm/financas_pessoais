@@ -82,6 +82,20 @@ CREATE TABLE IF NOT EXISTS transactions (
     FOREIGN KEY(category_id) REFERENCES categories(id)
 );
 
+-- Auditoria de alteracoes/remocoes em transactions (valores antes/depois em
+-- JSON). Sem FK para transactions(id): o registro de um DELETE precisa
+-- sobreviver depois que a linha original deixa de existir.
+CREATE TABLE IF NOT EXISTS transaction_history (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    transaction_id INTEGER NOT NULL,
+    user_id INTEGER NOT NULL,
+    action TEXT CHECK(action IN ('UPDATE', 'DELETE')) NOT NULL,
+    before_data TEXT NOT NULL,
+    after_data TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY(user_id) REFERENCES users(id)
+);
+
 CREATE TABLE IF NOT EXISTS ofx_imports (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     user_id INTEGER NOT NULL,

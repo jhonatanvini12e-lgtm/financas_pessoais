@@ -8,7 +8,12 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const DB_PATH = process.env.DB_PATH || 'finance.db';
-const DB_PASSWORD = process.env.DB_PASSWORD || 'super_secret_key_123!';
+
+if (!process.env.DB_PASSWORD) {
+    console.error('Erro fatal: variavel de ambiente DB_PASSWORD nao definida. Defina-a antes de iniciar o servidor.');
+    process.exit(1);
+}
+const DB_PASSWORD = process.env.DB_PASSWORD;
 
 fs.mkdirSync(path.dirname(path.resolve(DB_PATH)), { recursive: true });
 

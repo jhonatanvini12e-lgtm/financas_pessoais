@@ -4,14 +4,11 @@ import { api, setSessionInvalidHandler } from '../api/client.js';
 const AuthContext = createContext(null);
 
 export function AuthProvider({ children }) {
-    const [token, setToken] = useState(() => localStorage.getItem('token'));
     const [user, setUser] = useState(null);
     const [loadingUser, setLoadingUser] = useState(true);
     const [reauth, setReauth] = useState(null); // { reason, userId }
 
     const clearSession = useCallback(() => {
-        localStorage.removeItem('token');
-        setToken(null);
         setUser(null);
     }, []);
 
@@ -25,22 +22,20 @@ export function AuthProvider({ children }) {
         });
     }, [clearSession, user]);
 
-    useEffect(() => {
-        if (!token) {
-            setLoadingUser(false);
-            return;
-        }
-        api
+    // O token fica em cookie httpOnly (nao acessivel via JS), entao a unica forma
+    // de saber se ha sessao valida e' perguntar ao backend.
+    const refreshUser = useCallback(() => {
+        return api
             .get('/auth/me')
             .then(setUser)
-            .catch(() => clearSession())
-            .finally(() => setLoadingUser(false));
-    }, [token, clearSession]);
-
-    const login = useCallback((newToken) => {
-        localStorage.setItem('token', newToken);
-        setToken(newToken);
+            .catch(() => setUser(null));
     }, []);
+
+    useEffect(() => {
+        refreshUser().finally(() => setLoadingUser(false));
+    }, [refreshUser]);
+
+    const login = useCallback(() => refreshUser(), [refreshUser]);
 
     const logout = useCallback(async () => {
         try {
@@ -51,18 +46,13 @@ export function AuthProvider({ children }) {
         clearSession();
     }, [clearSession]);
 
-    const resolveReauth = useCallback(
-        (newToken) => {
-            localStorage.setItem('token', newToken);
-            setToken(newToken);
-            setReauth(null);
-        },
-        []
-    );
+    const resolveReauth = useCallback(() => {
+        setReauth(null);
+    }, []);
 
     return (
         <AuthContext.Provider
-            value={{ token, user, loadingUser, login, logout, reauth, resolveReauth, setReauth }}
+            value={{ user, loadingUser, login, logout, reauth, resolveReauth, setReauth }}
         >
             {children}
         </AuthContext.Provider>

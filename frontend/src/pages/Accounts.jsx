@@ -1,5 +1,7 @@
 import { useEffect, useState } from 'react';
 import { api } from '../api/client.js';
+import HideValuesToggle from '../components/HideValuesToggle.jsx';
+import { usePrivacy } from '../context/PrivacyContext.jsx';
 
 const PROVIDERS = ['nubank', 'inter', 'santander', 'mercadopago', 'outro'];
 
@@ -7,6 +9,8 @@ export default function Accounts() {
     const [accounts, setAccounts] = useState([]);
     const [cards, setCards] = useState([]);
     const [error, setError] = useState('');
+    const { hideValues } = usePrivacy();
+    const currency = (v) => (hideValues ? '••••••' : `R$ ${Number(v || 0).toFixed(2)}`);
 
     const [accountForm, setAccountForm] = useState({ bank_name: '', provider: 'nubank', balance: '' });
     const [cardForm, setCardForm] = useState({ card_name: '', credit_limit: '', closing_day: '', due_day: '', provider: 'nubank' });
@@ -57,7 +61,10 @@ export default function Accounts() {
 
     return (
         <div className="page">
-            <h1>Contas e Cartoes</h1>
+            <div className="page-header-row">
+                <h1>Contas e Cartoes</h1>
+                <HideValuesToggle />
+            </div>
             {error && <div className="error-msg">{error}</div>}
 
             <div className="two-col">
@@ -73,7 +80,7 @@ export default function Accounts() {
                                 <tr key={a.id}>
                                     <td>{a.bank_name}</td>
                                     <td>{a.provider}</td>
-                                    <td>R$ {a.balance.toFixed(2)}</td>
+                                    <td>{currency(a.balance)}</td>
                                     <td><button className="btn-link" onClick={() => removeAccount(a.id)}>remover</button></td>
                                 </tr>
                             ))}
@@ -104,7 +111,7 @@ export default function Accounts() {
                             {cards.map((c) => (
                                 <tr key={c.id}>
                                     <td>{c.card_name}</td>
-                                    <td>R$ {c.credit_limit.toFixed(2)}</td>
+                                    <td>{currency(c.credit_limit)}</td>
                                     <td>dia {c.closing_day}</td>
                                     <td>dia {c.due_day}</td>
                                     <td><button className="btn-link" onClick={() => removeCard(c.id)}>remover</button></td>

@@ -1,8 +1,20 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { api } from '../api/client.js';
 import ReauthModal from '../components/ReauthModal.jsx';
+import {
+    enqueueQuickAddTransaction,
+    listQueuedQuickAddTransactions,
+    removeQueuedQuickAddTransaction,
+} from '../offline/quickAddQueue.js';
 
 const today = () => new Date().toISOString().slice(0, 10);
+
+// fetch falha com TypeError quando nao ha rede (nao quando o servidor
+// responde com erro) -- assim distinguimos "sem conexao" (guarda na fila
+// local) de um erro real de validacao/servidor (mostra pro usuario).
+function isOfflineError(err) {
+    return !navigator.onLine || err instanceof TypeError;
+}
 
 export default function QuickAdd() {
     const [categories, setCategories] = useState([]);
@@ -18,8 +30,9 @@ export default function QuickAdd() {
     const [parcelado, setParcelado] = useState(false);
     const [installments, setInstallments] = useState(2);
     const [error, setError] = useState('');
-    const [saved, setSaved] = useState(false);
+    const [saved, setSaved] = useState('');
     const [saving, setSaving] = useState(false);
+    const [pendingCount, setPendingCount] = useState(0);
 
     useEffect(() => {
         api.get('/categories').then(setCategories).catch(() => {});
@@ -27,40 +40,79 @@ export default function QuickAdd() {
         api.get('/cards').then(setCards).catch(() => {});
     }, []);
 
+    // Tenta reenviar a fila local (lancamentos feitos offline) sempre que a
+    // pagina carrega e sempre que o browser avisa que a conexao voltou. Para
+    // no primeiro item que falhar de novo -- se ainda estamos offline nao
+    // faz sentido continuar tentando os demais.
+    const syncQueue = useCallback(async () => {
+        const queued = await listQueuedQuickAddTransactions().catch(() => []);
+        let remaining = queued.length;
+        for (const item of queued) {
+            try {
+                await api.post('/transactions', item.payload);
+                await removeQueuedQuickAddTransaction(item.localId);
+                remaining -= 1;
+            } catch (err) {
+                if (isOfflineError(err)) break;
+                // Payload que o servidor rejeita (ex: validacao) nunca vai
+                // conseguir ser reenviado sem edicao -- descarta da fila em
+                // vez de tentar pra sempre.
+                await removeQueuedQuickAddTransaction(item.localId).catch(() => {});
+                remaining -= 1;
+            }
+        }
+        setPendingCount(remaining);
+    }, []);
+
+    useEffect(() => {
+        syncQueue();
+        window.addEventListener('online', syncQueue);
+        return () => window.removeEventListener('online', syncQueue);
+    }, [syncQueue]);
+
     const destinationOptions = destinationType === 'account' ? accounts : destinationType === 'card' ? cards : [];
 
     const submit = async (e) => {
         e.preventDefault();
         setError('');
-        setSaved(false);
+        setSaved('');
         const value = Number(amount);
         if (!value) {
             setError('Informe um valor');
             return;
         }
+        const payload = {
+            description: description || null,
+            amount: type === 'expense' ? -Math.abs(value) : Math.abs(value),
+            date,
+            category_id: categoryId || null,
+            account_id: destinationType === 'account' ? destinationId || null : null,
+            card_id: destinationType === 'card' ? destinationId || null : null,
+            installments: parcelado ? Number(installments) : 1,
+        };
         setSaving(true);
         try {
-            await api.post('/transactions', {
-                description: description || null,
-                amount: type === 'expense' ? -Math.abs(value) : Math.abs(value),
-                date,
-                category_id: categoryId || null,
-                account_id: destinationType === 'account' ? destinationId || null : null,
-                card_id: destinationType === 'card' ? destinationId || null : null,
-                installments: parcelado ? Number(installments) : 1,
-            });
-            setAmount('');
-            setDescription('');
-            setDestinationType('none');
-            setDestinationId('');
-            setParcelado(false);
-            setInstallments(2);
-            setSaved(true);
+            await api.post('/transactions', payload);
+            setSaved('Lancamento salvo!');
         } catch (err) {
-            setError(err.message);
-        } finally {
-            setSaving(false);
+            if (!isOfflineError(err)) {
+                setError(err.message);
+                setSaving(false);
+                return;
+            }
+            // Sem conexao: guarda na fila local em vez de perder o lancamento.
+            // Sincroniza automaticamente quando o app detectar sinal de novo.
+            await enqueueQuickAddTransaction(payload);
+            setPendingCount((n) => n + 1);
+            setSaved('Sem conexao -- lancamento salvo neste dispositivo e sera sincronizado automaticamente.');
         }
+        setAmount('');
+        setDescription('');
+        setDestinationType('none');
+        setDestinationId('');
+        setParcelado(false);
+        setInstallments(2);
+        setSaving(false);
     };
 
     return (
@@ -69,6 +121,12 @@ export default function QuickAdd() {
                 <div className="quickadd-header">
                     <h1>Lancamento rapido</h1>
                 </div>
+
+                {pendingCount > 0 && (
+                    <p className="muted">
+                        {pendingCount} lancamento{pendingCount > 1 ? 's' : ''} pendente{pendingCount > 1 ? 's' : ''} de sincronizacao (salvos offline neste dispositivo).
+                    </p>
+                )}
 
                 <form onSubmit={submit} className="quickadd-form">
                     <div className="quickadd-type-toggle">
@@ -177,7 +235,7 @@ export default function QuickAdd() {
                     )}
 
                     {error && <div className="error-msg">{error}</div>}
-                    {saved && <div className="quickadd-success">Lancamento salvo!</div>}
+                    {saved && <div className="quickadd-success">{saved}</div>}
 
                     <button type="submit" className="btn-primary quickadd-submit" disabled={saving}>
                         {saving ? 'Salvando...' : 'Salvar lancamento'}

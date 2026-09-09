@@ -24,8 +24,8 @@ export default function ReauthModal() {
         e.preventDefault();
         setError('');
         try {
-            const data = await api.post('/auth/verify-2fa', { userId: reauth.userId, code });
-            resolveReauth(data.token);
+            await api.post('/auth/verify-2fa', { userId: reauth.userId, code });
+            resolveReauth();
             setCode('');
             setSent(false);
         } catch (err) {

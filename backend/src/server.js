@@ -2,9 +2,11 @@ import 'dotenv/config';
 import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
+import cookieParser from 'cookie-parser';
 import { initDB } from './db/index.js';
 import { authMiddleware } from './middleware/auth.js';
-import { loginRateLimiter } from './middleware/rateLimiter.js';
+import { loginRateLimiter, twoFactorRateLimiter, reauthRateLimiter } from './middleware/rateLimiter.js';
+import { csrfProtection } from './middleware/csrf.js';
 import { startCronJobs } from './cron/index.js';
 
 import authRoutes from './routes/auth.js';
@@ -22,16 +24,21 @@ import dashboardRoutes from './routes/dashboard.js';
 
 const app = express();
 const PORT = process.env.PORT || 3000;
+const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:5173';
 
 app.use(helmet());
-app.use(cors());
+app.use(cors({ origin: FRONTEND_URL, credentials: true }));
 app.use(express.json());
+app.use(cookieParser());
+app.use(csrfProtection);
 
 app.get('/api/health', (req, res) => {
     res.json({ status: 'OK', message: 'Servidor financeiro online e banco de dados montado!' });
 });
 
 app.use('/api/auth/login', loginRateLimiter);
+app.use('/api/auth/verify-2fa', twoFactorRateLimiter);
+app.use('/api/auth/request-reauth', reauthRateLimiter);
 app.use('/api/auth', authRoutes);
 
 app.use('/api/accounts', authMiddleware, accountsRoutes);

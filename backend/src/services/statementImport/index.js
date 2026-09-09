@@ -17,21 +17,27 @@ function syntheticFitid(txn, sourceTag) {
 // `categoryNames` so e usado no caminho do PDF: e a lista de categorias do
 // usuario que a IA usa para sugerir uma categoria por lancamento com base na
 // descricao (ver statementImport/pdfParser.js).
+// Retorno sempre no formato { transactions, warnings } -- so o caminho do PDF
+// (interpretado por IA) pode gerar warnings hoje (ver pdfParser.js), mas os
+// demais formatos devolvem o mesmo formato para o chamador nao precisar
+// distinguir por extensao.
 export async function parseStatementFile(originalFilename, buffer, categoryNames = [], password) {
     const ext = `.${(originalFilename.split('.').pop() || '').toLowerCase()}`;
 
     if (ext === '.ofx') {
-        return parseOfx(buffer.toString('utf8'));
+        return { transactions: parseOfx(buffer.toString('utf8')), warnings: [] };
     }
     if (ext === '.csv') {
-        return parseCsv(buffer.toString('utf8')).map((txn) => ({ ...txn, fitid: syntheticFitid(txn, 'CSV') }));
+        const transactions = parseCsv(buffer.toString('utf8')).map((txn) => ({ ...txn, fitid: syntheticFitid(txn, 'CSV') }));
+        return { transactions, warnings: [] };
     }
     if (ext === '.xlsx' || ext === '.xls') {
-        return parseXlsx(buffer).map((txn) => ({ ...txn, fitid: syntheticFitid(txn, 'XLSX') }));
+        const transactions = parseXlsx(buffer).map((txn) => ({ ...txn, fitid: syntheticFitid(txn, 'XLSX') }));
+        return { transactions, warnings: [] };
     }
     if (ext === '.pdf') {
-        const txns = await parsePdf(buffer, categoryNames, password);
-        return txns.map((txn) => ({ ...txn, fitid: syntheticFitid(txn, 'PDF') }));
+        const { transactions, warnings } = await parsePdf(buffer, categoryNames, password);
+        return { transactions: transactions.map((txn) => ({ ...txn, fitid: syntheticFitid(txn, 'PDF') })), warnings };
     }
 
     throw new Error(`Formato de arquivo nao suportado: ${ext}. Use .ofx, .csv, .xlsx ou .pdf.`);

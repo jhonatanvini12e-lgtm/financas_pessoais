@@ -18,10 +18,10 @@ import Alerts from './pages/Alerts.jsx';
 import Settings from './pages/Settings.jsx';
 
 function App() {
-    const { token, loadingUser } = useAuth();
+    const { user, loadingUser } = useAuth();
 
-    if (!token) return <Login />;
     if (loadingUser) return <p>Carregando...</p>;
+    if (!user) return <Login />;
 
     return (
         <Routes>
