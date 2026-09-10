@@ -69,8 +69,9 @@ const migrateColumns = () => {
 
     // recurring=1 (default) mantem o comportamento original: conta fixa que
     // repete todo mes no dia due_day. recurring=0 usa due_date (data unica).
+    // card_id marca uma linha gerada automaticamente pela importacao de fatura.
     const existingBillColumns = new Set(db.prepare('PRAGMA table_info(bills)').all().map((c) => c.name));
-    const billColumns = { recurring: 'INTEGER DEFAULT 1', due_date: 'TEXT' };
+    const billColumns = { recurring: 'INTEGER DEFAULT 1', due_date: 'TEXT', card_id: 'INTEGER' };
     for (const [name, type] of Object.entries(billColumns)) {
         if (!existingBillColumns.has(name)) db.exec(`ALTER TABLE bills ADD COLUMN ${name} ${type}`);
     }

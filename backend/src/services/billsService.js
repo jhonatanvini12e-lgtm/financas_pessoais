@@ -46,10 +46,11 @@ export function getBillsStatus(userId, referenceDate = new Date()) {
             id: bill.id,
             kind: 'BILL',
             name: bill.name,
-            categoryName: category?.name || null,
+            categoryName: bill.card_id ? 'Cartao de credito' : category?.name || null,
             expectedAmount: bill.expected_amount,
             dueDay: bill.due_day,
             recurring: isRecurring,
+            cardId: bill.card_id || null,
             period,
             dueDate: dueDate.toISOString().slice(0, 10),
             paid: Boolean(payment),
@@ -60,9 +61,12 @@ export function getBillsStatus(userId, referenceDate = new Date()) {
     });
 }
 
-// Faturas de cartao (virtuais, calculadas por cardService a partir das
-// transacoes do periodo aberto) exibidas lado a lado com as contas manuais,
-// com o mesmo controle de "paga" via card_invoice_payments.
+// Faturas de cartao ainda nao registradas explicitamente (ver
+// registerCardInvoiceFromImport): calculadas ao vivo por cardService a partir
+// das transacoes do periodo aberto, com o mesmo controle de "paga" via
+// card_invoice_payments. Uma fatura ja registrada (mesmo card_id + due_date
+// em bills) e' pulada aqui para nao aparecer duas vezes na lista -- a linha
+// registrada e' quem manda a partir dai (ver getBillsStatus).
 export function getCardInvoicesStatus(userId, referenceDate = new Date()) {
     const cards = db.prepare('SELECT * FROM credit_cards WHERE user_id = ?').all(userId);
 
@@ -70,6 +74,11 @@ export function getCardInvoicesStatus(userId, referenceDate = new Date()) {
         .map((card) => {
             const invoice = getCardInvoice(card, referenceDate);
             if (invoice.total <= 0) return null;
+
+            const alreadyRegistered = db
+                .prepare('SELECT id FROM bills WHERE user_id = ? AND card_id = ? AND due_date = ? AND active = 1')
+                .get(userId, card.id, invoice.dueDate);
+            if (alreadyRegistered) return null;
 
             const period = invoice.dueDate.slice(0, 7);
             const payment = db
@@ -93,6 +102,40 @@ export function getCardInvoicesStatus(userId, referenceDate = new Date()) {
             };
         })
         .filter(Boolean);
+}
+
+// Chamado apos a importacao de um extrato/fatura de cartao (ver
+// POST /transactions/import-statement/commit): calcula a fatura (valor +
+// vencimento) do ciclo em que os lancamentos importados caem -- usando
+// getCardInvoice com a data dos proprios lancamentos como referencia, entao
+// funciona tanto para a fatura aberta atual quanto para uma fatura ja
+// fechada de um mes anterior -- e registra/atualiza uma linha avulsa em
+// bills para ela aparecer em Contas a Pagar com o vencimento certo, sem
+// precisar de nenhuma acao manual do usuario. Idempotente: reimportar mais
+// lancamentos da mesma fatura atualiza o valor em vez de duplicar a linha.
+export function registerCardInvoiceFromImport(userId, cardId, referenceDate = new Date()) {
+    const card = db.prepare('SELECT * FROM credit_cards WHERE id = ? AND user_id = ?').get(cardId, userId);
+    if (!card) return null;
+
+    const invoice = getCardInvoice(card, referenceDate);
+    if (invoice.total <= 0) return null;
+
+    const existing = db
+        .prepare('SELECT * FROM bills WHERE user_id = ? AND card_id = ? AND due_date = ?')
+        .get(userId, cardId, invoice.dueDate);
+
+    if (existing) {
+        db.prepare('UPDATE bills SET expected_amount = ?, active = 1 WHERE id = ?').run(invoice.total, existing.id);
+        return existing.id;
+    }
+
+    const info = db
+        .prepare(
+            `INSERT INTO bills (user_id, name, expected_amount, recurring, due_date, card_id)
+             VALUES (?, ?, ?, 0, ?, ?)`
+        )
+        .run(userId, `Fatura ${card.card_name}`, invoice.total, invoice.dueDate, cardId);
+    return info.lastInsertRowid;
 }
 
 export function getAllBillsStatus(userId, referenceDate = new Date()) {

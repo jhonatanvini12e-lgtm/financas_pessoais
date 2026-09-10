@@ -6,7 +6,7 @@ const STATUS_CLASS = { PAID: 'status-paid', PENDING: 'status-pending', LATE: 'st
 const TYPE_LABEL = { BILL_FIXED: 'Fixa', BILL_ONE_TIME: 'Avulsa', CARD_INVOICE: 'Fatura' };
 
 function typeKeyFor(item) {
-    if (item.kind === 'CARD_INVOICE') return 'CARD_INVOICE';
+    if (item.kind === 'CARD_INVOICE' || item.cardId) return 'CARD_INVOICE';
     return item.recurring ? 'BILL_FIXED' : 'BILL_ONE_TIME';
 }
 

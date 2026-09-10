@@ -267,6 +267,11 @@ export default function OfxImportWizard() {
                                 {result.generatedInstallments} parcela{result.generatedInstallments > 1 ? 's' : ''} futura{result.generatedInstallments > 1 ? 's' : ''} de compras parceladas foram lancadas automaticamente nas datas projetadas.
                             </p>
                         )}
+                        {result.registeredBillId && (
+                            <p className="muted">
+                                A fatura e o vencimento foram registrados automaticamente em <Link to="/bills">Contas a Pagar</Link>.
+                            </p>
+                        )}
                         <button className="btn-primary" onClick={reset}>
                             Importar outro arquivo
                         </button>

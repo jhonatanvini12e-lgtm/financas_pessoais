@@ -132,7 +132,9 @@ CREATE TABLE IF NOT EXISTS envelope_transactions (
 
 -- recurring=1 (padrao): conta fixa que repete todo mes no dia due_day
 -- (aluguel, agua, luz, assinaturas). recurring=0: conta avulsa com data unica
--- em due_date, nao repete depois de paga.
+-- em due_date, nao repete depois de paga. card_id marca uma linha gerada
+-- automaticamente pela importacao de fatura (ver billsService.registerCardInvoiceFromImport) --
+-- uma por (card_id, due_date), para nao duplicar a mesma fatura ao reimportar.
 CREATE TABLE IF NOT EXISTS bills (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     user_id INTEGER NOT NULL,
@@ -142,9 +144,11 @@ CREATE TABLE IF NOT EXISTS bills (
     due_day INTEGER,
     recurring INTEGER DEFAULT 1,
     due_date TEXT,
+    card_id INTEGER,
     active INTEGER DEFAULT 1,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY(user_id) REFERENCES users(id),
+    FOREIGN KEY(card_id) REFERENCES credit_cards(id),
     FOREIGN KEY(category_id) REFERENCES categories(id)
 );
 

@@ -6,6 +6,7 @@ import { categorize, buildCategoryLearningMap } from '../services/categorization
 import { parseStatementFile, SUPPORTED_STATEMENT_EXTENSIONS } from '../services/statementImport/index.js';
 import { addMonths } from '../services/statementImport/columnMapper.js';
 import { checkBudgetAlerts } from '../services/budgetEngine.js';
+import { registerCardInvoiceFromImport } from '../services/billsService.js';
 
 const router = express.Router();
 
@@ -295,10 +296,12 @@ router.post('/import-statement/commit', (req, res) => {
     let imported = 0;
     let skipped = 0;
     let generatedInstallments = 0;
+    let latestTxnDate = null;
     for (const txn of transactions) {
         const amount = Number(txn.amount);
         const description = String(txn.description ?? '').trim();
         if (!txn.date || !Number.isFinite(amount) || amount === 0 || !description) { skipped += 1; continue; }
+        if (!latestTxnDate || txn.date > latestTxnDate) latestTxnDate = txn.date;
 
         // Revalida duplicidade na hora de gravar (o preview so' checou no
         // momento em que o arquivo foi lido -- outra importacao pode ter
@@ -345,7 +348,16 @@ router.post('/import-statement/commit', (req, res) => {
     ).run(req.user.id, account_id || null, card_id || null, filename || 'importacao', imported + generatedInstallments, skipped);
 
     checkBudgetAlerts(req.user.id);
-    res.json({ imported, skipped, generatedInstallments, total: transactions.length });
+
+    // Fatura importada: registra automaticamente em Contas a Pagar (valor +
+    // vencimento), usando a data dos proprios lancamentos para achar o ciclo
+    // certo -- funciona mesmo para uma fatura de mes anterior ja fechada.
+    let registeredBillId = null;
+    if (card_id && imported > 0 && latestTxnDate) {
+        registeredBillId = registerCardInvoiceFromImport(req.user.id, card_id, new Date(latestTxnDate));
+    }
+
+    res.json({ imported, skipped, generatedInstallments, total: transactions.length, registeredBillId });
 });
 
 // Aplica o aprendizado por historico (ver categorizationEngine.js) aos
