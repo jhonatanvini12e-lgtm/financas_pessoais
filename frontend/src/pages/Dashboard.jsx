@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { api } from '../api/client.js';
+import { usePolling } from '../hooks/usePolling.js';
 import StatCard from '../components/StatCard.jsx';
 import ProgressBar from '../components/ProgressBar.jsx';
 import HideValuesToggle from '../components/HideValuesToggle.jsx';
@@ -13,6 +14,10 @@ export default function Dashboard() {
 
     useEffect(() => {
         api.get('/dashboard').then(setData).catch((err) => setError(err.message));
+    }, []);
+
+    usePolling(() => {
+        api.get('/dashboard').then(setData).catch(() => {});
     }, []);
 
     if (error) return <div className="error-msg">{error}</div>;

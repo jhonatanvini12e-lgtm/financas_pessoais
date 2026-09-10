@@ -4,7 +4,8 @@ CREATE TABLE IF NOT EXISTS users (
     password_hash TEXT NOT NULL,
     email TEXT NOT NULL,
     last_login DATETIME,
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    household_id INTEGER REFERENCES users(id)
 );
 
 CREATE TABLE IF NOT EXISTS known_devices (

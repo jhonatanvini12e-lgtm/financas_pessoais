@@ -11,7 +11,7 @@ import {
 const router = express.Router();
 
 router.get('/', (req, res) => {
-    res.json(getAllBillsStatus(req.user.id));
+    res.json(getAllBillsStatus(req.user.householdId));
 });
 
 router.post('/', (req, res) => {
@@ -32,7 +32,7 @@ router.post('/', (req, res) => {
              VALUES (?, ?, ?, ?, ?, ?, ?)`
         )
         .run(
-            req.user.id,
+            req.user.householdId,
             name,
             category_id || null,
             expected_amount || 0,
@@ -44,7 +44,7 @@ router.post('/', (req, res) => {
 });
 
 router.put('/:id', (req, res) => {
-    const bill = db.prepare('SELECT * FROM bills WHERE id = ? AND user_id = ?').get(req.params.id, req.user.id);
+    const bill = db.prepare('SELECT * FROM bills WHERE id = ? AND user_id = ?').get(req.params.id, req.user.householdId);
     if (!bill) return res.status(404).json({ error: 'Conta nao encontrada' });
 
     const { name, category_id, expected_amount, due_day, due_date, recurring, active } = req.body;
@@ -65,7 +65,7 @@ router.put('/:id', (req, res) => {
 });
 
 router.delete('/:id', (req, res) => {
-    const bill = db.prepare('SELECT * FROM bills WHERE id = ? AND user_id = ?').get(req.params.id, req.user.id);
+    const bill = db.prepare('SELECT * FROM bills WHERE id = ? AND user_id = ?').get(req.params.id, req.user.householdId);
     if (!bill) return res.status(404).json({ error: 'Conta nao encontrada' });
 
     db.prepare('DELETE FROM bill_payments WHERE bill_id = ?').run(bill.id);
@@ -75,7 +75,7 @@ router.delete('/:id', (req, res) => {
 
 router.post('/:id/pay', (req, res) => {
     try {
-        res.json(markBillPaid(req.user.id, req.params.id, req.body));
+        res.json(markBillPaid(req.user.householdId, req.params.id, req.body));
     } catch (err) {
         res.status(400).json({ error: err.message });
     }
@@ -83,7 +83,7 @@ router.post('/:id/pay', (req, res) => {
 
 router.post('/:id/unpay', (req, res) => {
     try {
-        res.json(unmarkBillPaid(req.user.id, req.params.id, req.body.period));
+        res.json(unmarkBillPaid(req.user.householdId, req.params.id, req.body.period));
     } catch (err) {
         res.status(400).json({ error: err.message });
     }
@@ -91,7 +91,7 @@ router.post('/:id/unpay', (req, res) => {
 
 router.post('/card-invoices/:cardId/pay', (req, res) => {
     try {
-        res.json(markCardInvoicePaid(req.user.id, req.params.cardId, req.body));
+        res.json(markCardInvoicePaid(req.user.householdId, req.params.cardId, req.body));
     } catch (err) {
         res.status(400).json({ error: err.message });
     }
@@ -99,7 +99,7 @@ router.post('/card-invoices/:cardId/pay', (req, res) => {
 
 router.post('/card-invoices/:cardId/unpay', (req, res) => {
     try {
-        res.json(unmarkCardInvoicePaid(req.user.id, req.params.cardId, req.body.period));
+        res.json(unmarkCardInvoicePaid(req.user.householdId, req.params.cardId, req.body.period));
     } catch (err) {
         res.status(400).json({ error: err.message });
     }

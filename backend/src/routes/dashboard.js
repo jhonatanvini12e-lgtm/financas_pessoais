@@ -9,7 +9,7 @@ import { listAlerts } from '../services/notificationEngine.js';
 const router = express.Router();
 
 router.get('/', (req, res) => {
-    const userId = req.user.id;
+    const userId = req.user.householdId;
 
     // Mesmo calculo de accounts.js: saldo inicial da conta + lancamentos
     // feitos depois (manuais ou import de extrato/fatura).

@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { api } from '../api/client.js';
+import { usePolling } from '../hooks/usePolling.js';
 
 const STATUS_LABEL = { PAID: 'Paga', PENDING: 'Pendente', LATE: 'Atrasada' };
 const STATUS_CLASS = { PAID: 'status-paid', PENDING: 'status-pending', LATE: 'status-late' };
@@ -18,11 +19,14 @@ export default function Bills() {
     const [error, setError] = useState('');
     const [form, setForm] = useState(EMPTY_FORM);
 
-    const load = () => {
-        api.get('/bills').then(setData).catch((err) => setError(err.message));
+    const load = ({ silent = false } = {}) => {
+        api.get('/bills').then(setData).catch((err) => {
+            if (!silent) setError(err.message);
+        });
         api.get('/categories').then((cats) => setCategories(cats.filter((c) => c.type === 'EXPENSE'))).catch(() => {});
     };
     useEffect(load, []);
+    usePolling(() => load({ silent: true }), []);
 
     const addBill = async (e) => {
         e.preventDefault();

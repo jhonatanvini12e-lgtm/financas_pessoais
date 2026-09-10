@@ -5,20 +5,20 @@ import { compareStrategies, getDebtPayoffPlan, getDebtSummary, simulateRenegotia
 const router = express.Router();
 
 router.get('/', (req, res) => {
-    res.json(db.prepare('SELECT * FROM debts WHERE user_id = ? ORDER BY current_balance DESC').all(req.user.id));
+    res.json(db.prepare('SELECT * FROM debts WHERE user_id = ? ORDER BY current_balance DESC').all(req.user.householdId));
 });
 
 router.get('/summary', (req, res) => {
-    res.json(getDebtSummary(req.user.id));
+    res.json(getDebtSummary(req.user.householdId));
 });
 
 router.get('/payoff-plan', (req, res) => {
-    res.json(getDebtPayoffPlan(req.user.id));
+    res.json(getDebtPayoffPlan(req.user.householdId));
 });
 
 router.get('/simulate', (req, res) => {
     const extraBudget = Number(req.query.extra_budget) || 0;
-    res.json(compareStrategies(req.user.id, extraBudget));
+    res.json(compareStrategies(req.user.householdId, extraBudget));
 });
 
 router.post('/simulate-renegotiation', (req, res) => {
@@ -42,12 +42,12 @@ router.post('/', (req, res) => {
             `INSERT INTO debts (user_id, name, creditor, principal, current_balance, interest_rate_monthly, minimum_payment, due_day)
              VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
         )
-        .run(req.user.id, name, creditor || null, principal, current_balance, interest_rate_monthly, minimum_payment, due_day || null);
+        .run(req.user.householdId, name, creditor || null, principal, current_balance, interest_rate_monthly, minimum_payment, due_day || null);
     res.status(201).json(db.prepare('SELECT * FROM debts WHERE id = ?').get(info.lastInsertRowid));
 });
 
 router.put('/:id', (req, res) => {
-    const debt = db.prepare('SELECT * FROM debts WHERE id = ? AND user_id = ?').get(req.params.id, req.user.id);
+    const debt = db.prepare('SELECT * FROM debts WHERE id = ? AND user_id = ?').get(req.params.id, req.user.householdId);
     if (!debt) return res.status(404).json({ error: 'Divida nao encontrada' });
 
     const { name, creditor, current_balance, interest_rate_monthly, minimum_payment, due_day, status } = req.body;
@@ -68,7 +68,7 @@ router.put('/:id', (req, res) => {
 });
 
 router.post('/:id/payments', (req, res) => {
-    const debt = db.prepare('SELECT * FROM debts WHERE id = ? AND user_id = ?').get(req.params.id, req.user.id);
+    const debt = db.prepare('SELECT * FROM debts WHERE id = ? AND user_id = ?').get(req.params.id, req.user.householdId);
     if (!debt) return res.status(404).json({ error: 'Divida nao encontrada' });
 
     const amount = Number(req.body.amount);
@@ -83,7 +83,7 @@ router.post('/:id/payments', (req, res) => {
 });
 
 router.delete('/:id', (req, res) => {
-    const result = db.prepare('DELETE FROM debts WHERE id = ? AND user_id = ?').run(req.params.id, req.user.id);
+    const result = db.prepare('DELETE FROM debts WHERE id = ? AND user_id = ?').run(req.params.id, req.user.householdId);
     if (result.changes === 0) return res.status(404).json({ error: 'Divida nao encontrada' });
     res.json({ ok: true });
 });

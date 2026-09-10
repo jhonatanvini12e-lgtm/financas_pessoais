@@ -54,7 +54,19 @@ const migrateBillsDueDayNullable = () => {
     db.pragma('foreign_keys = ON');
 };
 
+// household_id liga o login de uma pessoa aos dados financeiros de outra
+// (ex: casal que quer ver as mesmas contas/transacoes com senhas separadas).
+// NULL significa "usa os proprios dados" -- e o padrao pra quem nao tem vinculo.
+const migrateHouseholdId = () => {
+    const existing = new Set(db.prepare('PRAGMA table_info(users)').all().map((c) => c.name));
+    if (!existing.has('household_id')) {
+        db.exec('ALTER TABLE users ADD COLUMN household_id INTEGER REFERENCES users(id)');
+    }
+};
+
 const migrateColumns = () => {
+    migrateHouseholdId();
+
     const existing = new Set(db.prepare('PRAGMA table_info(transactions)').all().map((c) => c.name));
     const columns = {
         installment_group: 'TEXT',

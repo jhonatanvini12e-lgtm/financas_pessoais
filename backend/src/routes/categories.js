@@ -4,7 +4,7 @@ import db from '../db/index.js';
 const router = express.Router();
 
 router.get('/', (req, res) => {
-    res.json(db.prepare('SELECT * FROM categories WHERE user_id = ? ORDER BY name').all(req.user.id));
+    res.json(db.prepare('SELECT * FROM categories WHERE user_id = ? ORDER BY name').all(req.user.householdId));
 });
 
 router.post('/', (req, res) => {
@@ -15,12 +15,12 @@ router.post('/', (req, res) => {
 
     const info = db
         .prepare('INSERT INTO categories (user_id, name, type, keywords, budget_limit) VALUES (?, ?, ?, ?, ?)')
-        .run(req.user.id, name, type, keywords || '', budget_limit || 0);
+        .run(req.user.householdId, name, type, keywords || '', budget_limit || 0);
     res.status(201).json(db.prepare('SELECT * FROM categories WHERE id = ?').get(info.lastInsertRowid));
 });
 
 router.put('/:id', (req, res) => {
-    const category = db.prepare('SELECT * FROM categories WHERE id = ? AND user_id = ?').get(req.params.id, req.user.id);
+    const category = db.prepare('SELECT * FROM categories WHERE id = ? AND user_id = ?').get(req.params.id, req.user.householdId);
     if (!category) return res.status(404).json({ error: 'Categoria nao encontrada' });
 
     const { name, type, keywords, budget_limit } = req.body;
@@ -35,7 +35,7 @@ router.put('/:id', (req, res) => {
 });
 
 router.delete('/:id', (req, res) => {
-    const result = db.prepare('DELETE FROM categories WHERE id = ? AND user_id = ?').run(req.params.id, req.user.id);
+    const result = db.prepare('DELETE FROM categories WHERE id = ? AND user_id = ?').run(req.params.id, req.user.householdId);
     if (result.changes === 0) return res.status(404).json({ error: 'Categoria nao encontrada' });
     res.json({ ok: true });
 });

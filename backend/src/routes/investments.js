@@ -10,16 +10,16 @@ import {
 const router = express.Router();
 
 router.get('/', (req, res) => {
-    res.json(db.prepare('SELECT * FROM investments WHERE user_id = ? ORDER BY id').all(req.user.id));
+    res.json(db.prepare('SELECT * FROM investments WHERE user_id = ? ORDER BY id').all(req.user.householdId));
 });
 
 router.get('/track-status', (req, res) => {
-    res.json(getInvestmentTrackStatus(req.user.id));
+    res.json(getInvestmentTrackStatus(req.user.householdId));
 });
 
 router.get('/recommendation', async (req, res) => {
     try {
-        res.json(await getInvestmentRecommendation(req.user.id));
+        res.json(await getInvestmentRecommendation(req.user.householdId));
     } catch (err) {
         res.status(500).json({ error: err.message });
     }
@@ -27,11 +27,11 @@ router.get('/recommendation', async (req, res) => {
 
 router.get('/turning-point', (req, res) => {
     const monthlyContribution = req.query.monthly_contribution ? Number(req.query.monthly_contribution) : undefined;
-    res.json(getTurningPointProjection(req.user.id, { monthlyContribution }));
+    res.json(getTurningPointProjection(req.user.householdId, { monthlyContribution }));
 });
 
 router.post('/', (req, res) => {
-    const status = getInvestmentTrackStatus(req.user.id);
+    const status = getInvestmentTrackStatus(req.user.householdId);
     const { type, name, amount_invested, current_value, expected_monthly_return_rate } = req.body;
 
     if (!status.canSuggestOtherAssets && type !== 'RESERVA_EMERGENCIA') {
@@ -50,18 +50,18 @@ router.post('/', (req, res) => {
             `INSERT INTO investments (user_id, type, name, amount_invested, current_value, expected_monthly_return_rate)
              VALUES (?, ?, ?, ?, ?, ?)`
         )
-        .run(req.user.id, type, name, amount_invested, current_value, expected_monthly_return_rate || null);
+        .run(req.user.householdId, type, name, amount_invested, current_value, expected_monthly_return_rate || null);
     res.status(201).json(db.prepare('SELECT * FROM investments WHERE id = ?').get(info.lastInsertRowid));
 });
 
 router.delete('/:id', (req, res) => {
-    const result = db.prepare('DELETE FROM investments WHERE id = ? AND user_id = ?').run(req.params.id, req.user.id);
+    const result = db.prepare('DELETE FROM investments WHERE id = ? AND user_id = ?').run(req.params.id, req.user.householdId);
     if (result.changes === 0) return res.status(404).json({ error: 'Investimento nao encontrado' });
     res.json({ ok: true });
 });
 
 router.get('/goals', (req, res) => {
-    res.json(getGoalsPlans(req.user.id));
+    res.json(getGoalsPlans(req.user.householdId));
 });
 
 router.post('/goals', (req, res) => {
@@ -72,14 +72,14 @@ router.post('/goals', (req, res) => {
 
     const info = db
         .prepare('INSERT INTO investment_goals (user_id, name, target_amount, target_date, priority) VALUES (?, ?, ?, ?, ?)')
-        .run(req.user.id, name, target_amount, target_date, priority || 0);
+        .run(req.user.householdId, name, target_amount, target_date, priority || 0);
     res.status(201).json(db.prepare('SELECT * FROM investment_goals WHERE id = ?').get(info.lastInsertRowid));
 });
 
 router.delete('/goals/:id', (req, res) => {
     const result = db
         .prepare('DELETE FROM investment_goals WHERE id = ? AND user_id = ?')
-        .run(req.params.id, req.user.id);
+        .run(req.params.id, req.user.householdId);
     if (result.changes === 0) return res.status(404).json({ error: 'Meta nao encontrada' });
     res.json({ ok: true });
 });

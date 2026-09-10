@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { api } from '../api/client.js';
+import { usePolling } from '../hooks/usePolling.js';
 import ProgressBar from '../components/ProgressBar.jsx';
 
 export default function Budget() {
@@ -10,6 +11,11 @@ export default function Budget() {
 
     useEffect(() => {
         api.get('/budget/status').then(setStatus).catch((err) => setError(err.message));
+        api.get('/budget/params').then(setParams).catch(() => {});
+    }, []);
+
+    usePolling(() => {
+        api.get('/budget/status').then(setStatus).catch(() => {});
         api.get('/budget/params').then(setParams).catch(() => {});
     }, []);
 

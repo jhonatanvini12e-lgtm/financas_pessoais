@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { api } from '../api/client.js';
+import { usePolling } from '../hooks/usePolling.js';
 import HideValuesToggle from '../components/HideValuesToggle.jsx';
 import { usePrivacy } from '../context/PrivacyContext.jsx';
 
@@ -21,6 +22,11 @@ export default function Accounts() {
     };
 
     useEffect(load, []);
+
+    usePolling(() => {
+        api.get('/accounts').then(setAccounts).catch(() => {});
+        api.get('/cards').then(setCards).catch(() => {});
+    }, []);
 
     const addAccount = async (e) => {
         e.preventDefault();

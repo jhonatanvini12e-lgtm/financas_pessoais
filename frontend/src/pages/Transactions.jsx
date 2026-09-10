@@ -1,5 +1,6 @@
 import { Fragment, useEffect, useState } from 'react';
 import { api } from '../api/client.js';
+import { usePolling } from '../hooks/usePolling.js';
 
 // A API ja devolve os lancamentos ordenados por data DESC (ver GET
 // /transactions), entao agrupar por mes so precisa observar quando o "YYYY-MM"
@@ -46,12 +47,14 @@ export default function Transactions() {
     const [recategorizing, setRecategorizing] = useState(false);
     const [recategorizeMsg, setRecategorizeMsg] = useState('');
 
-    const load = () => {
+    const load = ({ silent = false } = {}) => {
         const params = new URLSearchParams();
         if (filters.start) params.set('start', filters.start);
         if (filters.end) params.set('end', filters.end);
         if (filters.category_id) params.set('category_id', filters.category_id);
-        api.get(`/transactions?${params}`).then(setTransactions).catch((err) => setError(err.message));
+        api.get(`/transactions?${params}`).then(setTransactions).catch((err) => {
+            if (!silent) setError(err.message);
+        });
     };
 
     useEffect(() => {
@@ -63,6 +66,7 @@ export default function Transactions() {
     const destinationOptions = (type) => (type === 'account' ? accounts : type === 'card' ? cards : []);
 
     useEffect(load, [filters]);
+    usePolling(() => load({ silent: true }), [filters]);
 
     const accountsById = new Map(accounts.map((a) => [a.id, a]));
     const cardsById = new Map(cards.map((c) => [c.id, c]));

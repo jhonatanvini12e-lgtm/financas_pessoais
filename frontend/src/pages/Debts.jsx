@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { api } from '../api/client.js';
+import { usePolling } from '../hooks/usePolling.js';
 import LineChartCard from '../components/charts/LineChartCard.jsx';
 
 export default function Debts() {
@@ -16,12 +17,15 @@ export default function Debts() {
     const [renegForm, setRenegForm] = useState({ currentBalance: '', interestRateMonthly: '', minimumPayment: '', discountPercent: '0.2', installments: '', newMonthlyRate: '' });
     const [renegResult, setRenegResult] = useState(null);
 
-    const load = () => {
-        api.get('/debts').then(setDebts).catch((err) => setError(err.message));
+    const load = ({ silent = false } = {}) => {
+        api.get('/debts').then(setDebts).catch((err) => {
+            if (!silent) setError(err.message);
+        });
         api.get('/debts/summary').then(setSummary).catch(() => {});
         api.get('/debts/payoff-plan').then(setPlan).catch(() => {});
     };
     useEffect(load, []);
+    usePolling(() => load({ silent: true }), []);
 
     const addDebt = async (e) => {
         e.preventDefault();

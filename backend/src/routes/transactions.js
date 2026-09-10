@@ -56,7 +56,7 @@ function uploadStatementFile(req, res, next) {
 router.get('/', (req, res) => {
     const { start, end, category_id, account_id, card_id } = req.query;
     let query = 'SELECT * FROM transactions WHERE user_id = ?';
-    const params = [req.user.id];
+    const params = [req.user.householdId];
 
     if (start) { query += ' AND date >= ?'; params.push(start); }
     if (end) { query += ' AND date <= ?'; params.push(end); }
@@ -83,7 +83,7 @@ router.get('/compare', (req, res) => {
              WHERE user_id = ? AND date >= ?
              GROUP BY month ORDER BY month`
         )
-        .all(req.user.id, sinceStr);
+        .all(req.user.householdId, sinceStr);
 
     // LEFT JOIN (nao JOIN): lancamentos sem categoria (nenhuma keyword bateu)
     // precisam continuar aparecendo aqui como "Sem categoria" em vez de
@@ -97,7 +97,7 @@ router.get('/compare', (req, res) => {
              WHERE t.user_id = ? AND t.date >= ? AND t.amount < 0
              GROUP BY category ORDER BY total DESC`
         )
-        .all(req.user.id, sinceStr);
+        .all(req.user.householdId, sinceStr);
 
     res.json({ months, monthly, byCategory });
 });
@@ -135,7 +135,7 @@ router.post('/', (req, res) => {
         });
     }
 
-    const resolvedCategory = category_id ?? categorize(req.user.id, description);
+    const resolvedCategory = category_id ?? categorize(req.user.householdId, description);
     const totalInstallments = Math.min(Math.max(Number(installments) || 1, 1), 120);
 
     const insert = db.prepare(
@@ -150,7 +150,7 @@ router.post('/', (req, res) => {
         const installmentDescription =
             totalInstallments > 1 && description ? `${description} (${i + 1}/${totalInstallments})` : description || null;
         const info = insert.run(
-            req.user.id,
+            req.user.householdId,
             account_id || null,
             card_id || null,
             resolvedCategory || null,
@@ -164,7 +164,7 @@ router.post('/', (req, res) => {
         createdIds.push(info.lastInsertRowid);
     }
 
-    checkBudgetAlerts(req.user.id);
+    checkBudgetAlerts(req.user.householdId);
     const created = createdIds.map((id) => db.prepare('SELECT * FROM transactions WHERE id = ?').get(id));
     res.status(201).json(totalInstallments > 1 ? created : created[0]);
 });
@@ -176,7 +176,7 @@ function recordTransactionHistory(userId, action, before, after) {
 }
 
 router.put('/:id', (req, res) => {
-    const txn = db.prepare('SELECT * FROM transactions WHERE id = ? AND user_id = ?').get(req.params.id, req.user.id);
+    const txn = db.prepare('SELECT * FROM transactions WHERE id = ? AND user_id = ?').get(req.params.id, req.user.householdId);
     if (!txn) return res.status(404).json({ error: 'Transacao nao encontrada' });
 
     const { account_id, card_id, category_id, amount, date, description, status } = req.body;
@@ -194,16 +194,16 @@ router.put('/:id', (req, res) => {
         txn.id
     );
     const updated = db.prepare('SELECT * FROM transactions WHERE id = ?').get(txn.id);
-    recordTransactionHistory(req.user.id, 'UPDATE', txn, updated);
+    recordTransactionHistory(req.user.householdId, 'UPDATE', txn, updated);
     res.json(updated);
 });
 
 router.delete('/:id', (req, res) => {
-    const txn = db.prepare('SELECT * FROM transactions WHERE id = ? AND user_id = ?').get(req.params.id, req.user.id);
+    const txn = db.prepare('SELECT * FROM transactions WHERE id = ? AND user_id = ?').get(req.params.id, req.user.householdId);
     if (!txn) return res.status(404).json({ error: 'Transacao nao encontrada' });
 
-    db.prepare('DELETE FROM transactions WHERE id = ? AND user_id = ?').run(req.params.id, req.user.id);
-    recordTransactionHistory(req.user.id, 'DELETE', txn, null);
+    db.prepare('DELETE FROM transactions WHERE id = ? AND user_id = ?').run(req.params.id, req.user.householdId);
+    recordTransactionHistory(req.user.householdId, 'DELETE', txn, null);
     res.json({ ok: true });
 });
 
@@ -221,7 +221,7 @@ router.post('/import-statement/preview', uploadStatementFile, async (req, res) =
     if (!req.file) return res.status(400).json({ error: 'Arquivo e obrigatorio' });
     const { password } = req.body;
 
-    const categories = db.prepare('SELECT id, name FROM categories WHERE user_id = ?').all(req.user.id);
+    const categories = db.prepare('SELECT id, name FROM categories WHERE user_id = ?').all(req.user.householdId);
 
     let parsed;
     let warnings;
@@ -249,7 +249,7 @@ router.post('/import-statement/preview', uploadStatementFile, async (req, res) =
 
     // Construido uma vez para o lote inteiro: aprende com o historico ja
     // categorizado do usuario em vez de re-escanear a tabela a cada linha.
-    const learningMap = buildCategoryLearningMap(req.user.id);
+    const learningMap = buildCategoryLearningMap(req.user.householdId);
 
     const preview = parsed.map((txn) => {
         // Prioridade: (1) historico ja categorizado pelo usuario, (2) keywords
@@ -257,14 +257,14 @@ router.post('/import-statement/preview', uploadStatementFile, async (req, res) =
         // da descricao -- fallback usado sobretudo quando a descricao crua do
         // extrato nao bate com nenhuma keyword. So' uma sugestao inicial: o
         // usuario ainda pode trocar a categoria na tela de revisao.
-        let categoryId = categorize(req.user.id, txn.description, learningMap);
+        let categoryId = categorize(req.user.householdId, txn.description, learningMap);
         if (categoryId == null && txn.categoryNameSuggestion) {
             categoryId = categoryIdByName.get(txn.categoryNameSuggestion.trim().toLowerCase()) ?? null;
         }
 
         const duplicate = Boolean(
             txn.fitid &&
-                db.prepare('SELECT id FROM transactions WHERE user_id = ? AND external_fitid = ?').get(req.user.id, txn.fitid)
+                db.prepare('SELECT id FROM transactions WHERE user_id = ? AND external_fitid = ?').get(req.user.householdId, txn.fitid)
         );
 
         return {
@@ -309,7 +309,7 @@ router.post('/import-statement/commit', (req, res) => {
         if (txn.fitid) {
             const exists = db
                 .prepare('SELECT id FROM transactions WHERE user_id = ? AND external_fitid = ?')
-                .get(req.user.id, txn.fitid);
+                .get(req.user.householdId, txn.fitid);
             if (exists) { skipped += 1; continue; }
         }
 
@@ -326,7 +326,7 @@ router.post('/import-statement/commit', (req, res) => {
             const installmentDate = num === startNumber ? txn.date : addMonths(txn.date, num - startNumber);
             const installmentDescription = isInstallment ? `${description} (${num}/${totalInstallments})` : description;
             insertTxn.run(
-                req.user.id,
+                req.user.householdId,
                 account_id || null,
                 card_id || null,
                 categoryId,
@@ -345,16 +345,16 @@ router.post('/import-statement/commit', (req, res) => {
 
     db.prepare(
         'INSERT INTO ofx_imports (user_id, account_id, card_id, filename, imported_count, skipped_count) VALUES (?, ?, ?, ?, ?, ?)'
-    ).run(req.user.id, account_id || null, card_id || null, filename || 'importacao', imported + generatedInstallments, skipped);
+    ).run(req.user.householdId, account_id || null, card_id || null, filename || 'importacao', imported + generatedInstallments, skipped);
 
-    checkBudgetAlerts(req.user.id);
+    checkBudgetAlerts(req.user.householdId);
 
     // Fatura importada: registra automaticamente em Contas a Pagar (valor +
     // vencimento), usando a data dos proprios lancamentos para achar o ciclo
     // certo -- funciona mesmo para uma fatura de mes anterior ja fechada.
     let registeredBillId = null;
     if (card_id && imported > 0 && latestTxnDate) {
-        registeredBillId = registerCardInvoiceFromImport(req.user.id, card_id, new Date(latestTxnDate));
+        registeredBillId = registerCardInvoiceFromImport(req.user.householdId, card_id, new Date(latestTxnDate));
     }
 
     res.json({ imported, skipped, generatedInstallments, total: transactions.length, registeredBillId });
@@ -370,21 +370,21 @@ router.post('/recategorize', (req, res) => {
             `SELECT id, description FROM transactions
              WHERE user_id = ? AND category_id IS NULL AND description IS NOT NULL`
         )
-        .all(req.user.id);
+        .all(req.user.householdId);
 
-    const learningMap = buildCategoryLearningMap(req.user.id);
+    const learningMap = buildCategoryLearningMap(req.user.householdId);
     const update = db.prepare('UPDATE transactions SET category_id = ? WHERE id = ?');
 
     let updated = 0;
     for (const txn of uncategorized) {
-        const categoryId = categorize(req.user.id, txn.description, learningMap);
+        const categoryId = categorize(req.user.householdId, txn.description, learningMap);
         if (categoryId != null) {
             update.run(categoryId, txn.id);
             updated += 1;
         }
     }
 
-    checkBudgetAlerts(req.user.id);
+    checkBudgetAlerts(req.user.householdId);
     res.json({ updated, remaining: uncategorized.length - updated });
 });
 

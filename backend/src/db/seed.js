@@ -61,6 +61,11 @@ export const seedDatabase = async () => {
     );
 
     for (const userId of [user1Id, user2Id]) {
+        // Conta vinculada a outra (household_id) usa os dados de quem ela
+        // aponta -- nao faz sentido criar categorias/envelopes padrao pra ela.
+        const { household_id: householdId } = db.prepare('SELECT household_id FROM users WHERE id = ?').get(userId);
+        if (householdId) continue;
+
         ensureCategoriesForUser(userId);
         ensureEnvelopesForUser(userId);
     }

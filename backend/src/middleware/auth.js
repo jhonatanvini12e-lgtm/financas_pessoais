@@ -36,6 +36,13 @@ export function authMiddleware(req, res, next) {
 
     db.prepare('UPDATE sessions SET last_activity = CURRENT_TIMESTAMP WHERE id = ?').run(session.id);
 
-    req.user = { id: session.user_id, sessionId: session.id };
+    // householdId e o "dono" dos dados financeiros: igual ao id de login,
+    // a menos que essa conta esteja vinculada a outra (users.household_id).
+    const user = db.prepare('SELECT household_id FROM users WHERE id = ?').get(session.user_id);
+    req.user = {
+        id: session.user_id,
+        householdId: user?.household_id || session.user_id,
+        sessionId: session.id,
+    };
     next();
 }

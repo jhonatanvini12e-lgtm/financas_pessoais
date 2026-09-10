@@ -17,7 +17,7 @@ router.get('/', (req, res) => {
                  WHERE a.user_id = ?
                  ORDER BY a.id`
             )
-            .all(req.user.id)
+            .all(req.user.householdId)
     );
 });
 
@@ -27,13 +27,13 @@ router.post('/', (req, res) => {
 
     const info = db
         .prepare('INSERT INTO accounts (user_id, bank_name, provider, balance) VALUES (?, ?, ?, ?)')
-        .run(req.user.id, bank_name, provider || null, balance || 0);
+        .run(req.user.householdId, bank_name, provider || null, balance || 0);
     res.status(201).json(db.prepare('SELECT * FROM accounts WHERE id = ?').get(info.lastInsertRowid));
 });
 
 router.put('/:id', (req, res) => {
     const { bank_name, provider, balance } = req.body;
-    const account = db.prepare('SELECT * FROM accounts WHERE id = ? AND user_id = ?').get(req.params.id, req.user.id);
+    const account = db.prepare('SELECT * FROM accounts WHERE id = ? AND user_id = ?').get(req.params.id, req.user.householdId);
     if (!account) return res.status(404).json({ error: 'Conta nao encontrada' });
 
     db.prepare('UPDATE accounts SET bank_name = ?, provider = ?, balance = ? WHERE id = ?').run(
@@ -46,7 +46,7 @@ router.put('/:id', (req, res) => {
 });
 
 router.delete('/:id', (req, res) => {
-    const result = db.prepare('DELETE FROM accounts WHERE id = ? AND user_id = ?').run(req.params.id, req.user.id);
+    const result = db.prepare('DELETE FROM accounts WHERE id = ? AND user_id = ?').run(req.params.id, req.user.householdId);
     if (result.changes === 0) return res.status(404).json({ error: 'Conta nao encontrada' });
     res.json({ ok: true });
 });

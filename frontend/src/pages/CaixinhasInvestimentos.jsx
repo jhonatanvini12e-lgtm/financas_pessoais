@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { api } from '../api/client.js';
+import { usePolling } from '../hooks/usePolling.js';
 import ProgressBar from '../components/ProgressBar.jsx';
 import StatCard from '../components/StatCard.jsx';
 
@@ -25,15 +26,22 @@ export default function CaixinhasInvestimentos() {
     const [invForm, setInvForm] = useState({ type: 'RESERVA_EMERGENCIA', name: '', amount_invested: '', current_value: '' });
     const [goalForm, setGoalForm] = useState({ name: '', target_amount: '', target_date: '' });
 
-    const load = () => {
-        api.get('/investments/recommendation').then(setRecommendation).catch((err) => setError(err.message));
-        api.get('/investments/track-status').then(setTrack).catch((err) => setError(err.message));
-        api.get('/envelopes').then(setEnvelopes).catch((err) => setError(err.message));
+    const load = ({ silent = false } = {}) => {
+        api.get('/investments/recommendation').then(setRecommendation).catch((err) => {
+            if (!silent) setError(err.message);
+        });
+        api.get('/investments/track-status').then(setTrack).catch((err) => {
+            if (!silent) setError(err.message);
+        });
+        api.get('/envelopes').then(setEnvelopes).catch((err) => {
+            if (!silent) setError(err.message);
+        });
         api.get('/envelopes/suggestion').then(setSuggestion).catch(() => {});
         api.get('/investments').then(setInvestments).catch(() => {});
         api.get('/investments/goals').then(setGoals).catch(() => {});
     };
     useEffect(load, []);
+    usePolling(() => load({ silent: true }), []);
 
     const deposit = async (id) => {
         try {

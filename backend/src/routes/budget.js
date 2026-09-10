@@ -4,11 +4,11 @@ import { getBudgetStatus, checkBudgetAlerts, getBudgetParams } from '../services
 const router = express.Router();
 
 router.get('/status', (req, res) => {
-    res.json(getBudgetStatus(req.user.id));
+    res.json(getBudgetStatus(req.user.householdId));
 });
 
 router.post('/check', (req, res) => {
-    res.json(checkBudgetAlerts(req.user.id));
+    res.json(checkBudgetAlerts(req.user.householdId));
 });
 
 router.get('/params', (req, res) => {

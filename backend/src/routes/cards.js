@@ -5,15 +5,15 @@ import { getCardInvoice, getGlobalCreditUsage } from '../services/cardService.js
 const router = express.Router();
 
 router.get('/', (req, res) => {
-    res.json(db.prepare('SELECT * FROM credit_cards WHERE user_id = ? ORDER BY id').all(req.user.id));
+    res.json(db.prepare('SELECT * FROM credit_cards WHERE user_id = ? ORDER BY id').all(req.user.householdId));
 });
 
 router.get('/usage', (req, res) => {
-    res.json(getGlobalCreditUsage(req.user.id));
+    res.json(getGlobalCreditUsage(req.user.householdId));
 });
 
 router.get('/:id/invoice', (req, res) => {
-    const card = db.prepare('SELECT * FROM credit_cards WHERE id = ? AND user_id = ?').get(req.params.id, req.user.id);
+    const card = db.prepare('SELECT * FROM credit_cards WHERE id = ? AND user_id = ?').get(req.params.id, req.user.householdId);
     if (!card) return res.status(404).json({ error: 'Cartao nao encontrado' });
     res.json(getCardInvoice(card));
 });
@@ -28,12 +28,12 @@ router.post('/', (req, res) => {
         .prepare(
             'INSERT INTO credit_cards (user_id, card_name, credit_limit, closing_day, due_day, provider) VALUES (?, ?, ?, ?, ?, ?)'
         )
-        .run(req.user.id, card_name, credit_limit, closing_day, due_day, provider || null);
+        .run(req.user.householdId, card_name, credit_limit, closing_day, due_day, provider || null);
     res.status(201).json(db.prepare('SELECT * FROM credit_cards WHERE id = ?').get(info.lastInsertRowid));
 });
 
 router.put('/:id', (req, res) => {
-    const card = db.prepare('SELECT * FROM credit_cards WHERE id = ? AND user_id = ?').get(req.params.id, req.user.id);
+    const card = db.prepare('SELECT * FROM credit_cards WHERE id = ? AND user_id = ?').get(req.params.id, req.user.householdId);
     if (!card) return res.status(404).json({ error: 'Cartao nao encontrado' });
 
     const { card_name, credit_limit, closing_day, due_day, provider } = req.body;
@@ -51,7 +51,7 @@ router.put('/:id', (req, res) => {
 });
 
 router.delete('/:id', (req, res) => {
-    const result = db.prepare('DELETE FROM credit_cards WHERE id = ? AND user_id = ?').run(req.params.id, req.user.id);
+    const result = db.prepare('DELETE FROM credit_cards WHERE id = ? AND user_id = ?').run(req.params.id, req.user.householdId);
     if (result.changes === 0) return res.status(404).json({ error: 'Cartao nao encontrado' });
     res.json({ ok: true });
 });
