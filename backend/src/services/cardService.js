@@ -39,7 +39,11 @@ export function getCardInvoice(card, referenceDate = new Date()) {
         )
         .all(card.id, periodStart.toISOString().slice(0, 10), periodEnd.toISOString().slice(0, 10));
 
-    const total = rows.reduce((sum, txn) => sum + Math.abs(txn.amount), 0);
+    // So compras (amount < 0) compoem o valor da fatura -- mesma convencao
+    // usada no resto do app (ex: budgetEngine). Pagamentos/creditos importados
+    // com o cartao (amount > 0, ex: "PAGAMENTO ON LINE") normalmente quitam
+    // uma fatura anterior e nao devem inflar o valor desta.
+    const total = rows.filter((txn) => txn.amount < 0).reduce((sum, txn) => sum + Math.abs(txn.amount), 0);
 
     return {
         cardId: card.id,
