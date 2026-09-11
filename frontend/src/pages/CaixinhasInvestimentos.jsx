@@ -3,6 +3,8 @@ import { api } from '../api/client.js';
 import { usePolling } from '../hooks/usePolling.js';
 import ProgressBar from '../components/ProgressBar.jsx';
 import StatCard from '../components/StatCard.jsx';
+import { usePrivacy } from '../context/PrivacyContext.jsx';
+import { formatCurrency } from '../utils/currency.js';
 
 const TYPES = ['RESERVA_EMERGENCIA', 'RENDA_FIXA', 'TESOURO_DIRETO', 'FII', 'ACOES'];
 
@@ -22,6 +24,7 @@ export default function CaixinhasInvestimentos() {
     const [goals, setGoals] = useState([]);
     const [error, setError] = useState('');
     const [amounts, setAmounts] = useState({});
+    const { hideValues } = usePrivacy();
 
     const [invForm, setInvForm] = useState({ type: 'RESERVA_EMERGENCIA', name: '', amount_invested: '', current_value: '' });
     const [goalForm, setGoalForm] = useState({ name: '', target_amount: '', target_date: '' });
@@ -102,7 +105,7 @@ export default function CaixinhasInvestimentos() {
                     <h2>Recomendacao do mes</h2>
                     <p><strong>{ACTION_LABELS[recommendation.action]}</strong> — {recommendation.reasoning}</p>
                     <div className="stat-grid">
-                        <StatCard label="Sobra mensal (renda - despesas)" value={`R$ ${recommendation.monthlyAmountAvailable.toFixed(2)}`} />
+                        <StatCard label="Sobra mensal (renda - despesas)" value={formatCurrency(recommendation.monthlyAmountAvailable, hideValues)} />
                         <StatCard
                             label="Selic atual"
                             value={`${(recommendation.marketRate.selicAnnual * 100).toFixed(2)}% a.a.`}
@@ -119,7 +122,7 @@ export default function CaixinhasInvestimentos() {
                                     <StatCard
                                         key={a.type}
                                         label={a.type}
-                                        value={`R$ ${a.amount.toFixed(2)}`}
+                                        value={formatCurrency(a.amount, hideValues)}
                                         hint={`${(a.percent * 100).toFixed(0)}% da sobra alocavel`}
                                     />
                                 ))}
@@ -134,7 +137,7 @@ export default function CaixinhasInvestimentos() {
                 <p>Prioridade absoluta: nenhum outro ativo e sugerido antes de completar a reserva.</p>
                 <ProgressBar
                     ratio={track.emergencyFund.target > 0 ? track.emergencyFund.current / track.emergencyFund.target : 0}
-                    label={`R$ ${track.emergencyFund.current.toFixed(2)} de R$ ${track.emergencyFund.target.toFixed(2)}`}
+                    label={`${formatCurrency(track.emergencyFund.current, hideValues)} de ${formatCurrency(track.emergencyFund.target, hideValues)}`}
                 />
                 {!track.canSuggestOtherAssets && (
                     <p className="budget-alert-warning">
@@ -147,10 +150,10 @@ export default function CaixinhasInvestimentos() {
                 <h2>Caixinhas Automaticas</h2>
                 {suggestion && (
                     <>
-                        <p>Media de renda: R$ {suggestion.avgIncome.toFixed(2)} — Media de despesas: R$ {suggestion.avgExpense.toFixed(2)}</p>
+                        <p>Media de renda: {formatCurrency(suggestion.avgIncome, hideValues)} — Media de despesas: {formatCurrency(suggestion.avgExpense, hideValues)}</p>
                         <ul className="simple-list">
-                            <li>Fundo de Emergencia: R$ {suggestion.emergencyFund.suggestedMonthlyContribution.toFixed(2)}/mes {suggestion.emergencyFund.complete && '(meta concluida)'}</li>
-                            <li>Gastos Imprevistos: R$ {suggestion.unexpectedExpenses.suggestedMonthlyContribution.toFixed(2)}/mes</li>
+                            <li>Fundo de Emergencia: {formatCurrency(suggestion.emergencyFund.suggestedMonthlyContribution, hideValues)}/mes {suggestion.emergencyFund.complete && '(meta concluida)'}</li>
+                            <li>Gastos Imprevistos: {formatCurrency(suggestion.unexpectedExpenses.suggestedMonthlyContribution, hideValues)}/mes</li>
                         </ul>
                     </>
                 )}
@@ -161,7 +164,7 @@ export default function CaixinhasInvestimentos() {
                         return (
                             <div key={env.id} className="card">
                                 <h3>{env.name}</h3>
-                                <p>R$ {env.current_amount.toFixed(2)} {env.target_amount > 0 && `de R$ ${env.target_amount.toFixed(2)}`}</p>
+                                <p>{formatCurrency(env.current_amount, hideValues)} {env.target_amount > 0 && `de ${formatCurrency(env.target_amount, hideValues)}`}</p>
                                 {env.target_amount > 0 && <ProgressBar ratio={ratio} />}
                                 <div className="inline-form">
                                     <input
@@ -190,8 +193,8 @@ export default function CaixinhasInvestimentos() {
                             {investments.map((i) => (
                                 <tr key={i.id}>
                                     <td>{i.name}</td><td>{i.type}</td>
-                                    <td>R$ {i.amount_invested.toFixed(2)}</td>
-                                    <td>R$ {i.current_value.toFixed(2)}</td>
+                                    <td>{formatCurrency(i.amount_invested, hideValues)}</td>
+                                    <td>{formatCurrency(i.current_value, hideValues)}</td>
                                 </tr>
                             ))}
                         </tbody>
@@ -223,7 +226,7 @@ export default function CaixinhasInvestimentos() {
                             {goals.map((g) => (
                                 <tr key={g.goalId}>
                                     <td>{g.name}</td><td>{g.months}</td>
-                                    <td>R$ {g.monthlyContributionRequired.toFixed(2)}</td>
+                                    <td>{formatCurrency(g.monthlyContributionRequired, hideValues)}</td>
                                 </tr>
                             ))}
                         </tbody>

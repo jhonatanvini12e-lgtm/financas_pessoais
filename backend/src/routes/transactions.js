@@ -2,7 +2,7 @@ import express from 'express';
 import multer from 'multer';
 import crypto from 'node:crypto';
 import db from '../db/index.js';
-import { categorize, buildCategoryLearningMap } from '../services/categorizationEngine.js';
+import { categorize, buildCategoryLearningMap, buildCategoryKeywordList } from '../services/categorizationEngine.js';
 import { parseStatementFile, SUPPORTED_STATEMENT_EXTENSIONS } from '../services/statementImport/index.js';
 import { addMonths } from '../services/statementImport/columnMapper.js';
 import { checkBudgetAlerts } from '../services/budgetEngine.js';
@@ -135,6 +135,16 @@ router.post('/', (req, res) => {
         });
     }
 
+    if (account_id != null && !db.prepare('SELECT 1 FROM accounts WHERE id = ? AND user_id = ?').get(account_id, req.user.householdId)) {
+        return res.status(400).json({ error: 'Conta invalida' });
+    }
+    if (card_id != null && !db.prepare('SELECT 1 FROM credit_cards WHERE id = ? AND user_id = ?').get(card_id, req.user.householdId)) {
+        return res.status(400).json({ error: 'Cartao invalido' });
+    }
+    if (category_id != null && !db.prepare('SELECT 1 FROM categories WHERE id = ? AND user_id = ?').get(category_id, req.user.householdId)) {
+        return res.status(400).json({ error: 'Categoria invalida' });
+    }
+
     const resolvedCategory = category_id ?? categorize(req.user.householdId, description);
     const totalInstallments = Math.min(Math.max(Number(installments) || 1, 1), 120);
 
@@ -145,24 +155,27 @@ router.post('/', (req, res) => {
 
     const installmentGroup = totalInstallments > 1 ? crypto.randomUUID() : null;
     const createdIds = [];
-    for (let i = 0; i < totalInstallments; i += 1) {
-        const installmentDate = i === 0 ? date : addMonths(date, i);
-        const installmentDescription =
-            totalInstallments > 1 && description ? `${description} (${i + 1}/${totalInstallments})` : description || null;
-        const info = insert.run(
-            req.user.householdId,
-            account_id || null,
-            card_id || null,
-            resolvedCategory || null,
-            numericAmount,
-            installmentDate,
-            installmentDescription,
-            installmentGroup,
-            totalInstallments > 1 ? i + 1 : null,
-            totalInstallments > 1 ? totalInstallments : null
-        );
-        createdIds.push(info.lastInsertRowid);
-    }
+    const insertInstallments = db.transaction(() => {
+        for (let i = 0; i < totalInstallments; i += 1) {
+            const installmentDate = i === 0 ? date : addMonths(date, i);
+            const installmentDescription =
+                totalInstallments > 1 && description ? `${description} (${i + 1}/${totalInstallments})` : description || null;
+            const info = insert.run(
+                req.user.householdId,
+                account_id || null,
+                card_id || null,
+                resolvedCategory || null,
+                numericAmount,
+                installmentDate,
+                installmentDescription,
+                installmentGroup,
+                totalInstallments > 1 ? i + 1 : null,
+                totalInstallments > 1 ? totalInstallments : null
+            );
+            createdIds.push(info.lastInsertRowid);
+        }
+    });
+    insertInstallments();
 
     checkBudgetAlerts(req.user.householdId);
     const created = createdIds.map((id) => db.prepare('SELECT * FROM transactions WHERE id = ?').get(id));
@@ -180,6 +193,22 @@ router.put('/:id', (req, res) => {
     if (!txn) return res.status(404).json({ error: 'Transacao nao encontrada' });
 
     const { account_id, card_id, category_id, amount, date, description, status } = req.body;
+
+    if (account_id != null && !db.prepare('SELECT 1 FROM accounts WHERE id = ? AND user_id = ?').get(account_id, req.user.householdId)) {
+        return res.status(400).json({ error: 'Conta invalida' });
+    }
+    if (card_id != null && !db.prepare('SELECT 1 FROM credit_cards WHERE id = ? AND user_id = ?').get(card_id, req.user.householdId)) {
+        return res.status(400).json({ error: 'Cartao invalido' });
+    }
+    if (category_id != null && !db.prepare('SELECT 1 FROM categories WHERE id = ? AND user_id = ?').get(category_id, req.user.householdId)) {
+        return res.status(400).json({ error: 'Categoria invalida' });
+    }
+    if (date !== undefined && !isPlausibleTransactionDate(date)) {
+        return res.status(400).json({
+            error: `date deve estar entre ${TRANSACTION_DATE_MAX_YEARS_PAST} anos no passado e ${TRANSACTION_DATE_MAX_MONTHS_AHEAD} meses no futuro`,
+        });
+    }
+
     db.prepare(
         `UPDATE transactions SET account_id = ?, card_id = ?, category_id = ?, amount = ?, date = ?, description = ?, status = ?
          WHERE id = ?`
@@ -247,9 +276,17 @@ router.post('/import-statement/preview', uploadStatementFile, async (req, res) =
 
     const categoryIdByName = new Map(categories.map((c) => [c.name.trim().toLowerCase(), c.id]));
 
-    // Construido uma vez para o lote inteiro: aprende com o historico ja
-    // categorizado do usuario em vez de re-escanear a tabela a cada linha.
+    // Construidos uma vez para o lote inteiro em vez de re-consultar o banco
+    // a cada linha do extrato: aprendizado por historico, keywords cadastradas
+    // e fitids ja existentes (para a checagem de duplicidade abaixo).
     const learningMap = buildCategoryLearningMap(req.user.householdId);
+    const categoriesWithKeywords = buildCategoryKeywordList(req.user.householdId);
+    const existingFitids = new Set(
+        db
+            .prepare('SELECT external_fitid FROM transactions WHERE user_id = ? AND external_fitid IS NOT NULL')
+            .all(req.user.householdId)
+            .map((r) => r.external_fitid)
+    );
 
     const preview = parsed.map((txn) => {
         // Prioridade: (1) historico ja categorizado pelo usuario, (2) keywords
@@ -257,15 +294,12 @@ router.post('/import-statement/preview', uploadStatementFile, async (req, res) =
         // da descricao -- fallback usado sobretudo quando a descricao crua do
         // extrato nao bate com nenhuma keyword. So' uma sugestao inicial: o
         // usuario ainda pode trocar a categoria na tela de revisao.
-        let categoryId = categorize(req.user.householdId, txn.description, learningMap);
+        let categoryId = categorize(req.user.householdId, txn.description, learningMap, categoriesWithKeywords);
         if (categoryId == null && txn.categoryNameSuggestion) {
             categoryId = categoryIdByName.get(txn.categoryNameSuggestion.trim().toLowerCase()) ?? null;
         }
 
-        const duplicate = Boolean(
-            txn.fitid &&
-                db.prepare('SELECT id FROM transactions WHERE user_id = ? AND external_fitid = ?').get(req.user.householdId, txn.fitid)
-        );
+        const duplicate = Boolean(txn.fitid && existingFitids.has(txn.fitid));
 
         return {
             fitid: txn.fitid || null,
@@ -288,60 +322,82 @@ router.post('/import-statement/commit', (req, res) => {
         return res.status(400).json({ error: 'Nenhum lancamento para importar' });
     }
 
+    if (account_id != null && !db.prepare('SELECT 1 FROM accounts WHERE id = ? AND user_id = ?').get(account_id, req.user.householdId)) {
+        return res.status(400).json({ error: 'Conta invalida' });
+    }
+    if (card_id != null && !db.prepare('SELECT 1 FROM credit_cards WHERE id = ? AND user_id = ?').get(card_id, req.user.householdId)) {
+        return res.status(400).json({ error: 'Cartao invalido' });
+    }
+
     const insertTxn = db.prepare(
         `INSERT INTO transactions (user_id, account_id, card_id, category_id, amount, date, description, status, external_fitid, source, installment_group, installment_number, installment_total)
          VALUES (?, ?, ?, ?, ?, ?, ?, 'CLEARED', ?, 'STATEMENT_IMPORT', ?, ?, ?)`
+    );
+
+    // Pre-carregados uma vez para o lote inteiro em vez de uma query por
+    // linha do extrato: fitids ja existentes (duplicidade) e categorias
+    // validas do household (ownership de category_id por linha).
+    const existingFitids = new Set(
+        db
+            .prepare('SELECT external_fitid FROM transactions WHERE user_id = ? AND external_fitid IS NOT NULL')
+            .all(req.user.householdId)
+            .map((r) => r.external_fitid)
+    );
+    const validCategoryIds = new Set(
+        db.prepare('SELECT id FROM categories WHERE user_id = ?').all(req.user.householdId).map((r) => r.id)
     );
 
     let imported = 0;
     let skipped = 0;
     let generatedInstallments = 0;
     let latestTxnDate = null;
-    for (const txn of transactions) {
-        const amount = Number(txn.amount);
-        const description = String(txn.description ?? '').trim();
-        if (!txn.date || !Number.isFinite(amount) || amount === 0 || !description) { skipped += 1; continue; }
-        if (!latestTxnDate || txn.date > latestTxnDate) latestTxnDate = txn.date;
 
-        // Revalida duplicidade na hora de gravar (o preview so' checou no
-        // momento em que o arquivo foi lido -- outra importacao pode ter
-        // inserido o mesmo lancamento nesse intervalo).
-        if (txn.fitid) {
-            const exists = db
-                .prepare('SELECT id FROM transactions WHERE user_id = ? AND external_fitid = ?')
-                .get(req.user.householdId, txn.fitid);
-            if (exists) { skipped += 1; continue; }
+    const runImport = db.transaction((rows) => {
+        for (const txn of rows) {
+            const amount = Number(txn.amount);
+            const description = String(txn.description ?? '').trim();
+            if (!txn.date || !Number.isFinite(amount) || amount === 0 || !description) { skipped += 1; continue; }
+            if (!isPlausibleTransactionDate(txn.date)) { skipped += 1; continue; }
+            if (txn.category_id != null && !validCategoryIds.has(txn.category_id)) { skipped += 1; continue; }
+            if (!latestTxnDate || txn.date > latestTxnDate) latestTxnDate = txn.date;
+
+            // Revalida duplicidade na hora de gravar (o preview so' checou no
+            // momento em que o arquivo foi lido -- outra importacao pode ter
+            // inserido o mesmo lancamento nesse intervalo).
+            if (txn.fitid && existingFitids.has(txn.fitid)) { skipped += 1; continue; }
+
+            // Lancamento parcelado (ex: "3/10" na fatura): a linha do extrato so
+            // mostra a parcela atual, entao geramos aqui as parcelas restantes
+            // com a data projetada mes a mes (mesma logica de POST /transactions).
+            const isInstallment = Number(txn.installment_total) > 1 && Number(txn.installment_number) >= 1;
+            const startNumber = isInstallment ? Number(txn.installment_number) : 1;
+            const totalInstallments = isInstallment ? Number(txn.installment_total) : 1;
+            const installmentGroup = isInstallment ? crypto.randomUUID() : null;
+            const categoryId = txn.category_id || null;
+
+            for (let num = startNumber; num <= totalInstallments; num += 1) {
+                const installmentDate = num === startNumber ? txn.date : addMonths(txn.date, num - startNumber);
+                const installmentDescription = isInstallment ? `${description} (${num}/${totalInstallments})` : description;
+                insertTxn.run(
+                    req.user.householdId,
+                    account_id || null,
+                    card_id || null,
+                    categoryId,
+                    amount,
+                    installmentDate,
+                    installmentDescription,
+                    num === startNumber ? txn.fitid || null : null,
+                    installmentGroup,
+                    isInstallment ? num : null,
+                    isInstallment ? totalInstallments : null
+                );
+                if (num === startNumber) imported += 1;
+                else generatedInstallments += 1;
+            }
+            if (txn.fitid) existingFitids.add(txn.fitid);
         }
-
-        // Lancamento parcelado (ex: "3/10" na fatura): a linha do extrato so
-        // mostra a parcela atual, entao geramos aqui as parcelas restantes
-        // com a data projetada mes a mes (mesma logica de POST /transactions).
-        const isInstallment = Number(txn.installment_total) > 1 && Number(txn.installment_number) >= 1;
-        const startNumber = isInstallment ? Number(txn.installment_number) : 1;
-        const totalInstallments = isInstallment ? Number(txn.installment_total) : 1;
-        const installmentGroup = isInstallment ? crypto.randomUUID() : null;
-        const categoryId = txn.category_id || null;
-
-        for (let num = startNumber; num <= totalInstallments; num += 1) {
-            const installmentDate = num === startNumber ? txn.date : addMonths(txn.date, num - startNumber);
-            const installmentDescription = isInstallment ? `${description} (${num}/${totalInstallments})` : description;
-            insertTxn.run(
-                req.user.householdId,
-                account_id || null,
-                card_id || null,
-                categoryId,
-                amount,
-                installmentDate,
-                installmentDescription,
-                num === startNumber ? txn.fitid || null : null,
-                installmentGroup,
-                isInstallment ? num : null,
-                isInstallment ? totalInstallments : null
-            );
-            if (num === startNumber) imported += 1;
-            else generatedInstallments += 1;
-        }
-    }
+    });
+    runImport(transactions);
 
     db.prepare(
         'INSERT INTO ofx_imports (user_id, account_id, card_id, filename, imported_count, skipped_count) VALUES (?, ?, ?, ?, ?, ?)'
@@ -373,11 +429,12 @@ router.post('/recategorize', (req, res) => {
         .all(req.user.householdId);
 
     const learningMap = buildCategoryLearningMap(req.user.householdId);
+    const categoriesWithKeywords = buildCategoryKeywordList(req.user.householdId);
     const update = db.prepare('UPDATE transactions SET category_id = ? WHERE id = ?');
 
     let updated = 0;
     for (const txn of uncategorized) {
-        const categoryId = categorize(req.user.householdId, txn.description, learningMap);
+        const categoryId = categorize(req.user.householdId, txn.description, learningMap, categoriesWithKeywords);
         if (categoryId != null) {
             update.run(categoryId, txn.id);
             updated += 1;

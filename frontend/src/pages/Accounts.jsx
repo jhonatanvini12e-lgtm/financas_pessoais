@@ -3,15 +3,14 @@ import { api } from '../api/client.js';
 import { usePolling } from '../hooks/usePolling.js';
 import HideValuesToggle from '../components/HideValuesToggle.jsx';
 import { usePrivacy } from '../context/PrivacyContext.jsx';
-
-const PROVIDERS = ['nubank', 'inter', 'santander', 'mercadopago', 'outro'];
+import { formatCurrency } from '../utils/currency.js';
+import { PROVIDERS } from '../constants/providers.js';
 
 export default function Accounts() {
     const [accounts, setAccounts] = useState([]);
     const [cards, setCards] = useState([]);
     const [error, setError] = useState('');
     const { hideValues } = usePrivacy();
-    const currency = (v) => (hideValues ? '••••••' : `R$ ${Number(v || 0).toFixed(2)}`);
 
     const [accountForm, setAccountForm] = useState({ bank_name: '', provider: 'nubank', balance: '' });
     const [cardForm, setCardForm] = useState({ card_name: '', credit_limit: '', closing_day: '', due_day: '', provider: 'nubank' });
@@ -86,7 +85,7 @@ export default function Accounts() {
                                 <tr key={a.id}>
                                     <td>{a.bank_name}</td>
                                     <td>{a.provider}</td>
-                                    <td>{currency(a.balance)}</td>
+                                    <td>{formatCurrency(a.balance, hideValues)}</td>
                                     <td><button className="btn-link" onClick={() => removeAccount(a.id)}>remover</button></td>
                                 </tr>
                             ))}
@@ -98,7 +97,7 @@ export default function Accounts() {
                         <input placeholder="Nome do banco" value={accountForm.bank_name}
                             onChange={(e) => setAccountForm({ ...accountForm, bank_name: e.target.value })} required />
                         <select value={accountForm.provider} onChange={(e) => setAccountForm({ ...accountForm, provider: e.target.value })}>
-                            {PROVIDERS.map((p) => <option key={p} value={p}>{p}</option>)}
+                            {PROVIDERS.map((p) => <option key={p.value} value={p.value}>{p.label}</option>)}
                         </select>
                         <input placeholder="Saldo inicial" type="number" step="0.01" value={accountForm.balance}
                             onChange={(e) => setAccountForm({ ...accountForm, balance: e.target.value })} />
@@ -117,7 +116,7 @@ export default function Accounts() {
                             {cards.map((c) => (
                                 <tr key={c.id}>
                                     <td>{c.card_name}</td>
-                                    <td>{currency(c.credit_limit)}</td>
+                                    <td>{formatCurrency(c.credit_limit, hideValues)}</td>
                                     <td>dia {c.closing_day}</td>
                                     <td>dia {c.due_day}</td>
                                     <td><button className="btn-link" onClick={() => removeCard(c.id)}>remover</button></td>
@@ -137,7 +136,7 @@ export default function Accounts() {
                         <input placeholder="Dia vencimento" type="number" min="1" max="31" value={cardForm.due_day}
                             onChange={(e) => setCardForm({ ...cardForm, due_day: e.target.value })} required />
                         <select value={cardForm.provider} onChange={(e) => setCardForm({ ...cardForm, provider: e.target.value })}>
-                            {PROVIDERS.map((p) => <option key={p} value={p}>{p}</option>)}
+                            {PROVIDERS.map((p) => <option key={p.value} value={p.value}>{p.label}</option>)}
                         </select>
                         <button type="submit" className="btn-primary">Adicionar cartao</button>
                     </form>

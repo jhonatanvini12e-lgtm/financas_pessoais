@@ -35,9 +35,16 @@ router.put('/:id', (req, res) => {
 });
 
 router.delete('/:id', (req, res) => {
-    const result = db.prepare('DELETE FROM categories WHERE id = ? AND user_id = ?').run(req.params.id, req.user.householdId);
-    if (result.changes === 0) return res.status(404).json({ error: 'Categoria nao encontrada' });
-    res.json({ ok: true });
+    try {
+        const result = db.prepare('DELETE FROM categories WHERE id = ? AND user_id = ?').run(req.params.id, req.user.householdId);
+        if (result.changes === 0) return res.status(404).json({ error: 'Categoria nao encontrada' });
+        res.json({ ok: true });
+    } catch (err) {
+        if (err.code === 'SQLITE_CONSTRAINT_FOREIGNKEY') {
+            return res.status(409).json({ error: 'Existem registros vinculados a este item' });
+        }
+        throw err;
+    }
 });
 
 export default router;

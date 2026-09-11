@@ -12,7 +12,8 @@ router.post('/run', async (req, res) => {
         const result = await runBackup();
         res.json(result);
     } catch (err) {
-        res.status(500).json({ error: err.message });
+        console.error('Erro ao gerar/listar backup:', err);
+        res.status(500).json({ error: 'Falha ao processar backup' });
     }
 });
 

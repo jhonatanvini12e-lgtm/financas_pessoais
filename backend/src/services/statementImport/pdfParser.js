@@ -215,6 +215,25 @@ function parseItems(raw, providerLabel) {
 // contador de parcela).
 const CARD_NUMBER_PATTERN = /\b(?:\d[ .-]?){12,18}\d\b/g;
 const CPF_PATTERN = /\b\d{3}\.?\d{3}\.?\d{3}-?\d{2}\b/g;
+// E-mail e telefone tambem aparecem com frequencia no cabecalho de faturas
+// (dados do titular/correspondencia) sem nenhuma relacao com os lancamentos
+// em si, entao sao mascarados pelo mesmo motivo que numero de cartao/CPF.
+const EMAIL_PATTERN = /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g;
+// Cobre formatos comuns de telefone BR: "(11) 91234-5678", "11912345678",
+// "+55 11 91234-5678", com ou sem o 9 extra de celular.
+const PHONE_PATTERN = /(?:\+?55\s?)?(?:\(\d{2}\)|\d{2})\s?9?\d{4}[-.\s]?\d{4}\b/g;
+// Linhas de identificacao do titular/conta costumam vir como "Rotulo: valor"
+// -- mascaramos so o valor apos o rotulo (mantendo o rotulo visivel) para nao
+// perder o contexto que ajuda a IA a distinguir essas linhas de lancamentos
+// reais na hora de extrair as transacoes.
+const LABELED_LINE_PATTERNS = [
+    /^(Ag[êe]ncia[:\s]+).+$/gim,
+    /^(Conta[:\s]+).+$/gim,
+    /^(Titular[:\s]+).+$/gim,
+    /^(Cliente[:\s]+).+$/gim,
+    /^(CPF\/CNPJ[:\s]+).+$/gim,
+    /^(Endere[çc]o[:\s]+).+$/gim,
+];
 
 function maskCardNumber(match) {
     const digits = match.replace(/\D/g, '');
@@ -223,7 +242,17 @@ function maskCardNumber(match) {
 }
 
 function maskSensitiveData(text) {
-    return text.replace(CARD_NUMBER_PATTERN, maskCardNumber).replace(CPF_PATTERN, '***.***.***-**');
+    let masked = text
+        .replace(CARD_NUMBER_PATTERN, maskCardNumber)
+        .replace(CPF_PATTERN, '***.***.***-**')
+        .replace(EMAIL_PATTERN, '[REDACTED]')
+        .replace(PHONE_PATTERN, '[REDACTED]');
+
+    for (const pattern of LABELED_LINE_PATTERNS) {
+        masked = masked.replace(pattern, '$1[REDACTED]');
+    }
+
+    return masked;
 }
 
 const MAX_STATEMENT_CHARS = 60000;

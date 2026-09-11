@@ -9,8 +9,24 @@ const __dirname = path.dirname(__filename);
 
 const DB_PATH = process.env.DB_PATH || 'finance.db';
 
+// Valor de exemplo do .env.example: esta no historico git deste repositorio,
+// entao um deploy que esqueca de troca-lo fica com a criptografia do banco
+// inteiro (todos os dados financeiros) protegida por uma senha publica.
+const KNOWN_PLACEHOLDER_DB_PASSWORDS = new Set(['troque_esta_senha_do_banco']);
+
 if (!process.env.DB_PASSWORD) {
     console.error('Erro fatal: variavel de ambiente DB_PASSWORD nao definida. Defina-a antes de iniciar o servidor.');
+    process.exit(1);
+}
+if (KNOWN_PLACEHOLDER_DB_PASSWORDS.has(process.env.DB_PASSWORD) || process.env.DB_PASSWORD.length < 16) {
+    console.error(
+        'Erro fatal: DB_PASSWORD esta com o valor de exemplo ou e curta demais (minimo 16 caracteres). ' +
+        'Gere uma senha forte antes de subir em producao.'
+    );
+    process.exit(1);
+}
+if (process.env.DB_PASSWORD.includes("'")) {
+    console.error("Erro fatal: DB_PASSWORD nao pode conter aspas simples (quebra o pragma 'key=...' do SQLCipher).");
     process.exit(1);
 }
 const DB_PASSWORD = process.env.DB_PASSWORD;

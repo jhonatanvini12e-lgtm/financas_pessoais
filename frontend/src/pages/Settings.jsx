@@ -11,6 +11,7 @@ export default function Settings() {
     const [passwordForm, setPasswordForm] = useState({ currentPassword: '', newPassword: '' });
     const [webauthnDevices, setWebauthnDevices] = useState([]);
     const [registeringDevice, setRegisteringDevice] = useState(false);
+    const [biometricPassword, setBiometricPassword] = useState('');
 
     const loadBackups = () => { api.get('/backups').then(setBackups).catch((err) => setError(err.message)); };
     useEffect(loadBackups, []);
@@ -23,10 +24,11 @@ export default function Settings() {
         setMessage('');
         setRegisteringDevice(true);
         try {
-            const optionsJSON = await api.post('/auth/webauthn/register-options');
+            const optionsJSON = await api.post('/auth/webauthn/register-options', { password: biometricPassword });
             const attestation = await startRegistration({ optionsJSON });
             await api.post('/auth/webauthn/register-verify', attestation);
             setMessage('Biometria ativada neste dispositivo. Da proxima vez, o login vai pedir a digital em vez do codigo por e-mail.');
+            setBiometricPassword('');
             loadWebauthnDevices();
         } catch (err) {
             setError(err.message || 'Nao foi possivel registrar a biometria neste dispositivo.');
@@ -86,9 +88,13 @@ export default function Settings() {
                     Registre este aparelho para entrar com digital ou reconhecimento facial em vez de esperar o
                     codigo por e-mail. Funciona apenas neste navegador/dispositivo especifico.
                 </p>
-                <button className="btn-primary" onClick={registerThisDevice} disabled={registeringDevice}>
-                    {registeringDevice ? 'Aguardando biometria...' : 'Ativar biometria neste dispositivo'}
-                </button>
+                <div className="inline-form">
+                    <input type="password" placeholder="Confirme sua senha atual" value={biometricPassword}
+                        onChange={(e) => setBiometricPassword(e.target.value)} />
+                    <button className="btn-primary" onClick={registerThisDevice} disabled={registeringDevice || !biometricPassword}>
+                        {registeringDevice ? 'Aguardando biometria...' : 'Ativar biometria neste dispositivo'}
+                    </button>
+                </div>
                 {webauthnDevices.length > 0 && (
                     <div className="table-scroll">
                         <table className="data-table">
@@ -113,7 +119,7 @@ export default function Settings() {
                     <input type="password" placeholder="Senha atual" value={passwordForm.currentPassword}
                         onChange={(e) => setPasswordForm({ ...passwordForm, currentPassword: e.target.value })} required />
                     <input type="password" placeholder="Nova senha" value={passwordForm.newPassword}
-                        onChange={(e) => setPasswordForm({ ...passwordForm, newPassword: e.target.value })} required minLength={6} />
+                        onChange={(e) => setPasswordForm({ ...passwordForm, newPassword: e.target.value })} required minLength={8} />
                     <button type="submit" className="btn-primary">Atualizar</button>
                 </form>
             </section>

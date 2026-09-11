@@ -1,4 +1,5 @@
 import express from 'express';
+import bcrypt from 'bcryptjs';
 import {
     generateRegistrationOptions,
     verifyRegistrationResponse,
@@ -9,6 +10,7 @@ import db from '../db/index.js';
 import { authMiddleware } from '../middleware/auth.js';
 import { RP_NAME, RP_ID, ORIGIN } from '../config/webauthn.js';
 import { deviceFingerprint, twoFactorStore, completeLogin } from '../services/deviceAuth.js';
+import { sendNewCredentialAlert } from '../services/emailService.js';
 
 const router = express.Router();
 
@@ -32,7 +34,16 @@ function takeChallenge(store, userId) {
 
 router.post('/register-options', authMiddleware, async (req, res) => {
     const userId = req.user.id;
-    const user = db.prepare('SELECT * FROM users WHERE id = ?').get(userId);
+    // Exige a senha atual (step-up auth) antes de gerar o desafio: sem isso,
+    // uma sessao sequestrada (cookie roubado via XSS, dispositivo destravado)
+    // bastava para plantar uma biometria do atacante como credencial
+    // permanente da conta -- e essa credencial sobrevivia ate a uma troca de
+    // senha, ja que nao dependia da senha para ser criada.
+    const user = db.prepare('SELECT id, username, email, password_hash FROM users WHERE id = ?').get(userId);
+    const { password } = req.body;
+    if (!password || !(await bcrypt.compare(password, user.password_hash))) {
+        return res.status(401).json({ error: 'Senha atual incorreta' });
+    }
     const existing = db.prepare('SELECT credential_id FROM webauthn_credentials WHERE user_id = ?').all(userId);
 
     const options = await generateRegistrationOptions({
@@ -69,7 +80,8 @@ router.post('/register-verify', authMiddleware, async (req, res) => {
             expectedRPID: RP_ID,
         });
     } catch (err) {
-        return res.status(400).json({ error: `Falha ao verificar dispositivo: ${err.message}` });
+        console.error('Falha ao verificar registro WebAuthn:', err);
+        return res.status(400).json({ error: 'Nao foi possivel verificar o dispositivo' });
     }
 
     if (!verification.verified || !verification.registrationInfo) {
@@ -91,6 +103,9 @@ router.post('/register-verify', authMiddleware, async (req, res) => {
         JSON.stringify(credential.transports || []),
         req.body.deviceLabel || null
     );
+
+    const user = db.prepare('SELECT email FROM users WHERE id = ?').get(userId);
+    sendNewCredentialAlert(user.email);
 
     res.json({ ok: true });
 });
@@ -160,7 +175,8 @@ router.post('/login-verify', async (req, res) => {
             },
         });
     } catch (err) {
-        return res.status(400).json({ error: `Falha na verificacao biometrica: ${err.message}` });
+        console.error('Falha na verificacao biometrica:', err);
+        return res.status(400).json({ error: 'Falha na verificacao biometrica' });
     }
 
     if (!verification.verified) {

@@ -16,7 +16,7 @@ router.get('/', (req, res) => {
     const totalBalance = db
         .prepare(
             `SELECT COALESCE(SUM(
-                a.balance + COALESCE((SELECT SUM(t.amount) FROM transactions t WHERE t.account_id = a.id), 0)
+                a.balance + COALESCE((SELECT SUM(t.amount) FROM transactions t WHERE t.account_id = a.id AND t.user_id = a.user_id), 0)
              ), 0) as total
              FROM accounts a
              WHERE a.user_id = ?`

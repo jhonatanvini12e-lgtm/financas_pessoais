@@ -62,38 +62,54 @@ export function getContributionSuggestions(userId) {
 }
 
 export function depositToEnvelope(userId, envelopeId, amount, note) {
+    const numericAmount = Number(amount);
+    if (!Number.isFinite(numericAmount) || numericAmount <= 0) {
+        throw new Error('amount deve ser um numero positivo');
+    }
+
     const envelope = db.prepare('SELECT * FROM envelopes WHERE id = ? AND user_id = ?').get(envelopeId, userId);
     if (!envelope) throw new Error('Caixinha nao encontrada');
 
-    db.prepare('INSERT INTO envelope_transactions (envelope_id, amount, type, note) VALUES (?, ?, ?, ?)').run(
-        envelopeId,
-        amount,
-        'DEPOSIT',
-        note || null
-    );
-    db.prepare('UPDATE envelopes SET current_amount = current_amount + ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(
-        amount,
-        envelopeId
-    );
+    const runDeposit = db.transaction(() => {
+        db.prepare('INSERT INTO envelope_transactions (envelope_id, amount, type, note) VALUES (?, ?, ?, ?)').run(
+            envelopeId,
+            numericAmount,
+            'DEPOSIT',
+            note || null
+        );
+        db.prepare('UPDATE envelopes SET current_amount = current_amount + ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(
+            numericAmount,
+            envelopeId
+        );
+    });
+    runDeposit();
 
     return db.prepare('SELECT * FROM envelopes WHERE id = ?').get(envelopeId);
 }
 
 export function withdrawFromEnvelope(userId, envelopeId, amount, note) {
+    const numericAmount = Number(amount);
+    if (!Number.isFinite(numericAmount) || numericAmount <= 0) {
+        throw new Error('amount deve ser um numero positivo');
+    }
+
     const envelope = db.prepare('SELECT * FROM envelopes WHERE id = ? AND user_id = ?').get(envelopeId, userId);
     if (!envelope) throw new Error('Caixinha nao encontrada');
-    if (envelope.current_amount < amount) throw new Error('Saldo insuficiente na caixinha');
+    if (envelope.current_amount < numericAmount) throw new Error('Saldo insuficiente na caixinha');
 
-    db.prepare('INSERT INTO envelope_transactions (envelope_id, amount, type, note) VALUES (?, ?, ?, ?)').run(
-        envelopeId,
-        amount,
-        'WITHDRAW',
-        note || null
-    );
-    db.prepare('UPDATE envelopes SET current_amount = current_amount - ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(
-        amount,
-        envelopeId
-    );
+    const runWithdraw = db.transaction(() => {
+        db.prepare('INSERT INTO envelope_transactions (envelope_id, amount, type, note) VALUES (?, ?, ?, ?)').run(
+            envelopeId,
+            numericAmount,
+            'WITHDRAW',
+            note || null
+        );
+        db.prepare('UPDATE envelopes SET current_amount = current_amount - ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(
+            numericAmount,
+            envelopeId
+        );
+    });
+    runWithdraw();
 
     return db.prepare('SELECT * FROM envelopes WHERE id = ?').get(envelopeId);
 }

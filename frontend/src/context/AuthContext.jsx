@@ -1,5 +1,6 @@
 import { createContext, useContext, useEffect, useState, useCallback } from 'react';
 import { api, setSessionInvalidHandler } from '../api/client.js';
+import { clearQuickAddQueue } from '../offline/quickAddQueue.js';
 
 const AuthContext = createContext(null);
 
@@ -42,8 +43,10 @@ export function AuthProvider({ children }) {
             await api.post('/auth/logout');
         } catch {
             /* ignore */
+        } finally {
+            await clearQuickAddQueue().catch(() => {});
+            clearSession();
         }
-        clearSession();
     }, [clearSession]);
 
     const resolveReauth = useCallback(() => {

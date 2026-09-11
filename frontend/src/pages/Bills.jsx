@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react';
 import { api } from '../api/client.js';
 import { usePolling } from '../hooks/usePolling.js';
+import { usePrivacy } from '../context/PrivacyContext.jsx';
+import { formatCurrency } from '../utils/currency.js';
 
 const STATUS_LABEL = { PAID: 'Paga', PENDING: 'Pendente', LATE: 'Atrasada' };
 const STATUS_CLASS = { PAID: 'status-paid', PENDING: 'status-pending', LATE: 'status-late' };
@@ -18,6 +20,7 @@ export default function Bills() {
     const [categories, setCategories] = useState([]);
     const [error, setError] = useState('');
     const [form, setForm] = useState(EMPTY_FORM);
+    const { hideValues } = usePrivacy();
 
     const load = ({ silent = false } = {}) => {
         api.get('/bills').then(setData).catch((err) => {
@@ -73,8 +76,8 @@ export default function Bills() {
             {error && <div className="error-msg">{error}</div>}
 
             <div className="stat-grid">
-                <div className="card"><h3>Pendente este mes</h3><p>R$ {data.totalPending.toFixed(2)}</p></div>
-                <div className="card"><h3>Atrasado</h3><p>R$ {data.totalLate.toFixed(2)}</p></div>
+                <div className="card"><h3>Pendente este mes</h3><p>{formatCurrency(data.totalPending, hideValues)}</p></div>
+                <div className="card"><h3>Atrasado</h3><p>{formatCurrency(data.totalLate, hideValues)}</p></div>
                 <div className="card"><h3>Contas atrasadas</h3><p>{data.lateCount}</p></div>
             </div>
 
@@ -114,7 +117,7 @@ export default function Bills() {
                                     <td>{item.name}</td>
                                     <td>{item.categoryName || '-'}</td>
                                     <td>{TYPE_LABEL[typeKeyFor(item)]}</td>
-                                    <td>R$ {item.expectedAmount.toFixed(2)}</td>
+                                    <td>{formatCurrency(item.expectedAmount, hideValues)}</td>
                                     <td>{item.dueDate}</td>
                                     <td><span className={`badge-status ${STATUS_CLASS[item.status]}`}>{STATUS_LABEL[item.status]}</span></td>
                                     <td>

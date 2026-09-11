@@ -13,7 +13,10 @@ export function usePolling(callback, deps, intervalMs = DEFAULT_INTERVAL_MS) {
     callbackRef.current = callback;
 
     useEffect(() => {
-        const interval = setInterval(() => callbackRef.current(), intervalMs);
+        const interval = setInterval(() => {
+            if (document.hidden) return;
+            callbackRef.current();
+        }, intervalMs);
         return () => clearInterval(interval);
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, deps);

@@ -5,12 +5,12 @@ import StatCard from '../components/StatCard.jsx';
 import ProgressBar from '../components/ProgressBar.jsx';
 import HideValuesToggle from '../components/HideValuesToggle.jsx';
 import { usePrivacy } from '../context/PrivacyContext.jsx';
+import { formatCurrency } from '../utils/currency.js';
 
 export default function Dashboard() {
     const [data, setData] = useState(null);
     const [error, setError] = useState('');
     const { hideValues } = usePrivacy();
-    const currency = (v) => (hideValues ? '••••••' : `R$ ${Number(v || 0).toFixed(2)}`);
 
     useEffect(() => {
         api.get('/dashboard').then(setData).catch((err) => setError(err.message));
@@ -31,22 +31,22 @@ export default function Dashboard() {
             </div>
 
             <div className="stat-grid">
-                <StatCard label="Saldo em contas" value={currency(data.totalBalance)} tone="hero" />
+                <StatCard label="Saldo em contas" value={formatCurrency(data.totalBalance, hideValues)} tone="hero" />
                 <StatCard
                     label="Uso de credito"
                     value={`${(data.creditUsage.usageRatio * 100).toFixed(0)}%`}
                     tone={data.creditUsage.usageRatio >= 0.7 ? 'critical' : 'default'}
-                    hint={`${currency(data.creditUsage.totalUsage)} de ${currency(data.creditUsage.totalLimit)}`}
+                    hint={`${formatCurrency(data.creditUsage.totalUsage, hideValues)} de ${formatCurrency(data.creditUsage.totalLimit, hideValues)}`}
                 />
                 <StatCard
                     label="Dividas em aberto"
-                    value={currency(data.debtSummary.totalBalance)}
+                    value={formatCurrency(data.debtSummary.totalBalance, hideValues)}
                     hint={`${data.debtSummary.count} divida(s)`}
                 />
                 <StatCard
                     label="Reserva de emergencia"
-                    value={currency(data.envelopeSuggestions.emergencyFund.current)}
-                    hint={`Meta: ${currency(data.envelopeSuggestions.emergencyFund.target)}`}
+                    value={formatCurrency(data.envelopeSuggestions.emergencyFund.current, hideValues)}
+                    hint={`Meta: ${formatCurrency(data.envelopeSuggestions.emergencyFund.target, hideValues)}`}
                 />
             </div>
 
@@ -66,7 +66,7 @@ export default function Dashboard() {
                     <ul className="simple-list">
                         {data.upcomingInvoices.map((inv) => (
                             <li key={inv.cardId}>
-                                Vencimento {inv.dueDate} — {currency(inv.total)}
+                                Vencimento {inv.dueDate} — {formatCurrency(inv.total, hideValues)}
                             </li>
                         ))}
                     </ul>

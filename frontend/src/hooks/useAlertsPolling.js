@@ -32,7 +32,10 @@ export function useAlertsPolling(enabled) {
         };
 
         poll();
-        const interval = setInterval(poll, POLL_INTERVAL_MS);
+        const interval = setInterval(() => {
+            if (document.hidden) return;
+            poll();
+        }, POLL_INTERVAL_MS);
         return () => {
             cancelled = true;
             clearInterval(interval);

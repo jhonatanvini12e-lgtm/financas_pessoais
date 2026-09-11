@@ -100,6 +100,12 @@ export const sendNewDeviceAlert = (toEmail, code) =>
         { to: toEmail, code }
     );
 
+export const sendNewCredentialAlert = (toEmail) =>
+    sendMail(
+        'Nova biometria registrada na sua conta',
+        `Uma nova biometria (digital/reconhecimento facial) foi registrada na sua conta. Se foi voce, pode ignorar este e-mail. Se nao foi voce, troque sua senha imediatamente e remova o dispositivo em Configuracoes.`
+    );
+
 export const sendInactivityReauthCode = (toEmail, code) =>
     sendMail(
         'Sessao expirada por inatividade',

@@ -178,8 +178,16 @@ export function markCardInvoicePaid(userId, cardId, { amount_paid, period } = {}
     const card = db.prepare('SELECT * FROM credit_cards WHERE id = ? AND user_id = ?').get(cardId, userId);
     if (!card) throw new Error('Cartao nao encontrado');
 
+    // getCardInvoice(card) sempre calcula o ciclo ATUAL -- usa-lo como
+    // fallback de amount_paid quando `period` informado e' de um ciclo
+    // diferente (ex: fatura atrasada de um mes anterior) gravaria o valor da
+    // fatura do mes corrente como se fosse do periodo historico informado.
     const invoice = getCardInvoice(card);
-    const p = period || invoice.dueDate.slice(0, 7);
+    const currentPeriod = invoice.dueDate.slice(0, 7);
+    const p = period || currentPeriod;
+    if (amount_paid == null && p !== currentPeriod) {
+        throw new Error('Informe amount_paid para quitar um periodo diferente do ciclo atual');
+    }
     db.prepare(
         `INSERT INTO card_invoice_payments (card_id, period, amount_paid, paid_date) VALUES (?, ?, ?, CURRENT_TIMESTAMP)
          ON CONFLICT(card_id, period) DO UPDATE SET amount_paid = excluded.amount_paid, paid_date = CURRENT_TIMESTAMP`

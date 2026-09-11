@@ -57,9 +57,19 @@ export function buildCategoryLearningMap(userId) {
     return bestByKey;
 }
 
-// `learningMap` e opcional (buildCategoryLearningMap(userId) se omitido) --
-// passe um mapa pre-construido ao categorizar varios lancamentos em lote.
-export function categorize(userId, description, learningMap) {
+// Construido uma vez por lote, no mesmo espirito de buildCategoryLearningMap:
+// evita reconsultar a tabela categories a cada chamada de categorize() dentro
+// de um loop (ver rotas de import/recategorize que passam isso adiante).
+export function buildCategoryKeywordList(userId) {
+    return db
+        .prepare("SELECT id, keywords FROM categories WHERE user_id = ? AND keywords IS NOT NULL AND keywords != ''")
+        .all(userId);
+}
+
+// `learningMap` e `categoriesWithKeywords` sao opcionais (recalculados a
+// partir do banco se omitidos) -- passe versoes pre-construidas ao
+// categorizar varios lancamentos em lote.
+export function categorize(userId, description, learningMap, categoriesWithKeywords) {
     if (!description) return null;
 
     const normalizedKey = normalizeForMatch(description);
@@ -68,9 +78,7 @@ export function categorize(userId, description, learningMap) {
     if (learnedCategoryId != null) return learnedCategoryId;
 
     const normalizedDescription = description.toLowerCase();
-    const categories = db
-        .prepare("SELECT id, keywords FROM categories WHERE user_id = ? AND keywords IS NOT NULL AND keywords != ''")
-        .all(userId);
+    const categories = categoriesWithKeywords || buildCategoryKeywordList(userId);
 
     for (const category of categories) {
         const keywords = category.keywords.split(',').map((k) => k.trim().toLowerCase()).filter(Boolean);

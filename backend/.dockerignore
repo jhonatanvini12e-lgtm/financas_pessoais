@@ -5,3 +5,6 @@ backups
 .env.*
 *.db
 *.log
+.git
+*.md
+coverage

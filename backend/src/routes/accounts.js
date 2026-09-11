@@ -12,7 +12,7 @@ router.get('/', (req, res) => {
         db
             .prepare(
                 `SELECT a.id, a.user_id, a.bank_name, a.provider, a.created_at,
-                        a.balance + COALESCE((SELECT SUM(t.amount) FROM transactions t WHERE t.account_id = a.id), 0) as balance
+                        a.balance + COALESCE((SELECT SUM(t.amount) FROM transactions t WHERE t.account_id = a.id AND t.user_id = a.user_id), 0) as balance
                  FROM accounts a
                  WHERE a.user_id = ?
                  ORDER BY a.id`
@@ -46,9 +46,16 @@ router.put('/:id', (req, res) => {
 });
 
 router.delete('/:id', (req, res) => {
-    const result = db.prepare('DELETE FROM accounts WHERE id = ? AND user_id = ?').run(req.params.id, req.user.householdId);
-    if (result.changes === 0) return res.status(404).json({ error: 'Conta nao encontrada' });
-    res.json({ ok: true });
+    try {
+        const result = db.prepare('DELETE FROM accounts WHERE id = ? AND user_id = ?').run(req.params.id, req.user.householdId);
+        if (result.changes === 0) return res.status(404).json({ error: 'Conta nao encontrada' });
+        res.json({ ok: true });
+    } catch (err) {
+        if (err.code === 'SQLITE_CONSTRAINT_FOREIGNKEY') {
+            return res.status(409).json({ error: 'Existem registros vinculados a este item' });
+        }
+        throw err;
+    }
 });
 
 export default router;

@@ -2,12 +2,15 @@ import { useEffect, useState } from 'react';
 import { api } from '../api/client.js';
 import { usePolling } from '../hooks/usePolling.js';
 import LineChartCard from '../components/charts/LineChartCard.jsx';
+import { usePrivacy } from '../context/PrivacyContext.jsx';
+import { formatCurrency } from '../utils/currency.js';
 
 export default function Debts() {
     const [debts, setDebts] = useState([]);
     const [summary, setSummary] = useState(null);
     const [plan, setPlan] = useState(null);
     const [error, setError] = useState('');
+    const { hideValues } = usePrivacy();
     const [form, setForm] = useState({ name: '', creditor: '', principal: '', current_balance: '', interest_rate_monthly: '', minimum_payment: '' });
 
     const [showAdvanced, setShowAdvanced] = useState(false);
@@ -88,7 +91,7 @@ export default function Debts() {
 
             {summary && (
                 <div className="stat-grid">
-                    <div className="card"><h3>Total em dividas</h3><p>R$ {summary.totalBalance.toFixed(2)}</p></div>
+                    <div className="card"><h3>Total em dividas</h3><p>{formatCurrency(summary.totalBalance, hideValues)}</p></div>
                     <div className="card"><h3>Taxa media ponderada</h3><p>{(summary.weightedAverageRateMonthly * 100).toFixed(2)}% a.m.</p></div>
                 </div>
             )}
@@ -99,11 +102,11 @@ export default function Debts() {
                     <div className="stat-grid">
                         <div className="card">
                             <h3>Sobra mensal media</h3>
-                            <p>R$ {plan.monthlySurplus.toFixed(2)}</p>
+                            <p>{formatCurrency(plan.monthlySurplus, hideValues)}</p>
                         </div>
                         <div className="card">
                             <h3>Extra sugerido para dividas</h3>
-                            <p>R$ {plan.suggestedExtraPayment.toFixed(2)}/mes</p>
+                            <p>{formatCurrency(plan.suggestedExtraPayment, hideValues)}/mes</p>
                         </div>
                         <div className="card">
                             <h3>Tempo estimado de quitacao</h3>
@@ -111,14 +114,14 @@ export default function Debts() {
                         </div>
                         <div className="card">
                             <h3>Economia em juros</h3>
-                            <p>{plan.projection.interestSaved != null ? `R$ ${plan.projection.interestSaved.toFixed(2)}` : 'Divida cresce sem o extra'}</p>
+                            <p>{plan.projection.interestSaved != null ? formatCurrency(plan.projection.interestSaved, hideValues) : 'Divida cresce sem o extra'}</p>
                         </div>
                     </div>
 
                     <h3>Ordem de prioridade (avalanche)</h3>
                     <ol>
                         {plan.priorityOrder.map((d) => (
-                            <li key={d.id}>{d.name} — R$ {d.balance.toFixed(2)} a {(d.rateMonthly * 100).toFixed(2)}% a.m.</li>
+                            <li key={d.id}>{d.name} — {formatCurrency(d.balance, hideValues)} a {(d.rateMonthly * 100).toFixed(2)}% a.m.</li>
                         ))}
                     </ol>
 
@@ -158,9 +161,9 @@ export default function Debts() {
                         {debts.map((d) => (
                             <tr key={d.id}>
                                 <td>{d.name}</td><td>{d.creditor}</td>
-                                <td>R$ {d.current_balance.toFixed(2)}</td>
+                                <td>{formatCurrency(d.current_balance, hideValues)}</td>
                                 <td>{(d.interest_rate_monthly * 100).toFixed(2)}%</td>
-                                <td>R$ {d.minimum_payment.toFixed(2)}</td>
+                                <td>{formatCurrency(d.minimum_payment, hideValues)}</td>
                                 <td><button className="btn-link" onClick={() => remove(d.id)}>remover</button></td>
                             </tr>
                         ))}
@@ -190,12 +193,12 @@ export default function Debts() {
                             <div className="card">
                                 <h3>Avalanche</h3>
                                 <p>{simulation.avalanche.monthsToPayoff ? `${simulation.avalanche.monthsToPayoff} meses para quitar` : '50+ anos para quitar'}</p>
-                                <p>Juros totais: {simulation.avalanche.neverPaysOff ? 'divida nunca para de crescer' : `R$ ${simulation.avalanche.totalInterestPaid.toFixed(2)}`}</p>
+                                <p>Juros totais: {simulation.avalanche.neverPaysOff ? 'divida nunca para de crescer' : formatCurrency(simulation.avalanche.totalInterestPaid, hideValues)}</p>
                             </div>
                             <div className="card">
                                 <h3>Bola de Neve</h3>
                                 <p>{simulation.snowball.monthsToPayoff ? `${simulation.snowball.monthsToPayoff} meses para quitar` : '50+ anos para quitar'}</p>
-                                <p>Juros totais: {simulation.snowball.neverPaysOff ? 'divida nunca para de crescer' : `R$ ${simulation.snowball.totalInterestPaid.toFixed(2)}`}</p>
+                                <p>Juros totais: {simulation.snowball.neverPaysOff ? 'divida nunca para de crescer' : formatCurrency(simulation.snowball.totalInterestPaid, hideValues)}</p>
                             </div>
                         </div>
                         <LineChartCard
@@ -225,10 +228,10 @@ export default function Debts() {
 
                 {renegResult && (
                     <div className="stat-grid">
-                        <div className="card"><h3>Caminho atual</h3><p>Total: R$ {renegResult.currentPath.totalPaid.toFixed(2)}</p></div>
-                        <div className="card"><h3>A vista com desconto</h3><p>Valor: R$ {renegResult.lumpSumOption.amount.toFixed(2)}</p><p>Economia: R$ {renegResult.lumpSumOption.savings.toFixed(2)}</p></div>
+                        <div className="card"><h3>Caminho atual</h3><p>Total: {formatCurrency(renegResult.currentPath.totalPaid, hideValues)}</p></div>
+                        <div className="card"><h3>A vista com desconto</h3><p>Valor: {formatCurrency(renegResult.lumpSumOption.amount, hideValues)}</p><p>Economia: {formatCurrency(renegResult.lumpSumOption.savings, hideValues)}</p></div>
                         {renegResult.installmentOption && (
-                            <div className="card"><h3>Novo parcelamento</h3><p>{renegResult.installmentOption.installments}x de R$ {renegResult.installmentOption.monthlyPayment.toFixed(2)}</p><p>Total: R$ {renegResult.installmentOption.totalPaid.toFixed(2)}</p></div>
+                            <div className="card"><h3>Novo parcelamento</h3><p>{renegResult.installmentOption.installments}x de {formatCurrency(renegResult.installmentOption.monthlyPayment, hideValues)}</p><p>Total: {formatCurrency(renegResult.installmentOption.totalPaid, hideValues)}</p></div>
                         )}
                     </div>
                 )}

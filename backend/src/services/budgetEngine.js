@@ -17,15 +17,18 @@ export function getBudgetStatus(userId) {
         .prepare("SELECT * FROM categories WHERE user_id = ? AND type = 'EXPENSE'")
         .all(userId);
 
-    const spentByCategory = db
+    const spentRows = db
         .prepare(
             `SELECT category_id, SUM(ABS(amount)) as total
              FROM transactions
              WHERE user_id = ? AND date >= ? AND date <= ? AND amount < 0
              GROUP BY category_id`
         )
-        .all(userId, start, end)
-        .reduce((map, row) => ({ ...map, [row.category_id]: row.total }), {});
+        .all(userId, start, end);
+    const spentByCategory = {};
+    for (const row of spentRows) {
+        spentByCategory[row.category_id] = row.total;
+    }
 
     const categoryStatus = categories.map((cat) => {
         const spent = spentByCategory[cat.id] || 0;

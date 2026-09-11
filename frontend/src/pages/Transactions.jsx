@@ -1,6 +1,9 @@
 import { Fragment, useEffect, useState } from 'react';
 import { api } from '../api/client.js';
 import { usePolling } from '../hooks/usePolling.js';
+import { usePrivacy } from '../context/PrivacyContext.jsx';
+import { formatCurrency } from '../utils/currency.js';
+import { PROVIDER_LABELS } from '../constants/providers.js';
 
 // A API ja devolve os lancamentos ordenados por data DESC (ver GET
 // /transactions), entao agrupar por mes so precisa observar quando o "YYYY-MM"
@@ -19,8 +22,6 @@ function monthLabel(dateStr) {
 // "card_name" (apelido livre que o usuario escolhe, nem sempre o nome do
 // banco). Por isso, pra cartao, preferimos o provider traduzido e so caimos
 // pro card_name quando o provider e "outro"/desconhecido.
-const PROVIDER_LABELS = { nubank: 'Nubank', inter: 'Inter', santander: 'Santander', mercadopago: 'Mercado Pago' };
-
 function bankNameForTxn(t, accountsById, cardsById) {
     if (t.account_id) return accountsById.get(t.account_id)?.bank_name || '-';
     if (t.card_id) {
@@ -46,6 +47,7 @@ export default function Transactions() {
     const [editError, setEditError] = useState('');
     const [recategorizing, setRecategorizing] = useState(false);
     const [recategorizeMsg, setRecategorizeMsg] = useState('');
+    const { hideValues } = usePrivacy();
 
     const load = ({ silent = false } = {}) => {
         const params = new URLSearchParams();
@@ -261,7 +263,7 @@ export default function Transactions() {
                                             <td>{t.description}</td>
                                             <td>{categoryName(t.category_id)}</td>
                                             <td>{bankNameForTxn(t, accountsById, cardsById)}</td>
-                                            <td className={t.amount < 0 ? 'text-negative' : 'text-positive'}>R$ {t.amount.toFixed(2)}</td>
+                                            <td className={t.amount < 0 ? 'text-negative' : 'text-positive'}>{formatCurrency(t.amount, hideValues)}</td>
                                             <td className="row-actions">
                                                 <button className="btn-icon" title="Editar lancamento" aria-label="Editar lancamento" onClick={() => openEdit(t)}>
                                                     ✎

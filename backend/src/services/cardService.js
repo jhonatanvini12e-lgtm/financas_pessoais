@@ -3,6 +3,13 @@ import budgetParams from '../config/budgetParams.js';
 import { raiseAlert, alreadyAlertedToday } from './notificationEngine.js';
 import { sendCardDueAlert, sendCardLimitAlert } from './emailService.js';
 
+// Dias de fechamento/vencimento 29-31 precisam de um teto por mes (fevereiro
+// so tem 28/29 dias) -- sem isso, `new Date(year, month, 31)` "rola" para o
+// mes seguinte. Mesma logica de clamping usada em billsService.dueDateForPeriod.
+function clampDay(year, month, day) {
+    return Math.min(day, new Date(year, month + 1, 0).getDate());
+}
+
 // Dado o dia de fechamento/vencimento de um cartao, calcula o periodo da
 // fatura atualmente aberta e a data de vencimento correspondente.
 export function getCurrentInvoicePeriod(closingDay, dueDay, referenceDate = new Date()) {
@@ -10,20 +17,22 @@ export function getCurrentInvoicePeriod(closingDay, dueDay, referenceDate = new 
     const month = referenceDate.getMonth();
     const today = referenceDate.getDate();
 
-    const thisMonthClosing = new Date(year, month, closingDay);
+    const thisMonthClosing = new Date(year, month, clampDay(year, month, closingDay));
     let periodEnd;
     let periodStart;
 
     if (today <= closingDay) {
         periodEnd = thisMonthClosing;
-        periodStart = new Date(year, month - 1, closingDay + 1);
+        periodStart = new Date(year, month - 1, clampDay(year, month - 1, closingDay + 1));
     } else {
-        periodEnd = new Date(year, month + 1, closingDay);
-        periodStart = new Date(year, month, closingDay + 1);
+        periodEnd = new Date(year, month + 1, clampDay(year, month + 1, closingDay));
+        periodStart = new Date(year, month, clampDay(year, month, closingDay + 1));
     }
 
     const dueMonthOffset = dueDay <= closingDay ? 1 : 0;
-    const dueDate = new Date(periodEnd.getFullYear(), periodEnd.getMonth() + dueMonthOffset, dueDay);
+    const dueYear = periodEnd.getFullYear();
+    const dueMonth = periodEnd.getMonth() + dueMonthOffset;
+    const dueDate = new Date(dueYear, dueMonth, clampDay(dueYear, dueMonth, dueDay));
 
     return { periodStart, periodEnd, dueDate };
 }
@@ -34,10 +43,10 @@ export function getCardInvoice(card, referenceDate = new Date()) {
     const rows = db
         .prepare(
             `SELECT * FROM transactions
-             WHERE card_id = ? AND date >= ? AND date <= ?
+             WHERE card_id = ? AND user_id = ? AND date >= ? AND date <= ?
              ORDER BY date DESC`
         )
-        .all(card.id, periodStart.toISOString().slice(0, 10), periodEnd.toISOString().slice(0, 10));
+        .all(card.id, card.user_id, periodStart.toISOString().slice(0, 10), periodEnd.toISOString().slice(0, 10));
 
     // So compras (amount < 0) compoem o valor da fatura -- mesma convencao
     // usada no resto do app (ex: budgetEngine). Pagamentos/creditos importados

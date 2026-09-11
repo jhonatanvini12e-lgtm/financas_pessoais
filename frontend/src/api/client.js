@@ -37,7 +37,8 @@ async function request(path, { method = 'GET', body, isForm = false } = {}) {
     }
 
     if (!res.ok) {
-        const error = new Error(data?.error || `Erro na requisicao (${res.status})`);
+        const message = res.status >= 500 ? 'Erro interno do servidor. Tente novamente mais tarde.' : (data?.error || `Erro na requisicao (${res.status})`);
+        const error = new Error(message);
         if (data?.code) error.code = data.code;
         throw error;
     }

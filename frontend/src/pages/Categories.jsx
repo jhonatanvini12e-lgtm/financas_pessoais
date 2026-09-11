@@ -1,10 +1,13 @@
 import { useEffect, useState } from 'react';
 import { api } from '../api/client.js';
+import { usePrivacy } from '../context/PrivacyContext.jsx';
+import { formatCurrency } from '../utils/currency.js';
 
 export default function Categories() {
     const [categories, setCategories] = useState([]);
     const [error, setError] = useState('');
     const [form, setForm] = useState({ name: '', type: 'EXPENSE', keywords: '', budget_limit: '' });
+    const { hideValues } = usePrivacy();
 
     const load = () => { api.get('/categories').then(setCategories).catch((err) => setError(err.message)); };
     useEffect(load, []);
@@ -58,7 +61,7 @@ export default function Categories() {
                                 <td>{c.name}</td>
                                 <td>{c.type === 'EXPENSE' ? 'Despesa' : 'Receita'}</td>
                                 <td>{c.keywords}</td>
-                                <td>R$ {c.budget_limit.toFixed(2)}</td>
+                                <td>{formatCurrency(c.budget_limit, hideValues)}</td>
                                 <td><button className="btn-link" onClick={() => remove(c.id)}>remover</button></td>
                             </tr>
                         ))}

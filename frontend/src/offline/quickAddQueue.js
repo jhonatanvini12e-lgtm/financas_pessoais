@@ -53,3 +53,12 @@ export async function removeQueuedQuickAddTransaction(localId) {
         store.delete(localId);
     });
 }
+
+// Limpa toda a fila local -- usado no logout para nao deixar lancamentos
+// pendentes (valor, descricao, categoria) em texto puro no IndexedDB de um
+// dispositivo compartilhado/perdido apos o usuario sair da conta.
+export async function clearQuickAddQueue() {
+    await withStore('readwrite', (store) => {
+        store.clear();
+    });
+}

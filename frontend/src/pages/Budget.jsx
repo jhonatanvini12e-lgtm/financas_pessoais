@@ -2,12 +2,15 @@ import { useEffect, useMemo, useState } from 'react';
 import { api } from '../api/client.js';
 import { usePolling } from '../hooks/usePolling.js';
 import ProgressBar from '../components/ProgressBar.jsx';
+import { usePrivacy } from '../context/PrivacyContext.jsx';
+import { formatCurrency } from '../utils/currency.js';
 
 export default function Budget() {
     const [status, setStatus] = useState(null);
     const [params, setParams] = useState(null);
     const [error, setError] = useState('');
     const [detail, setDetail] = useState(null);
+    const { hideValues } = usePrivacy();
 
     useEffect(() => {
         api.get('/budget/status').then(setStatus).catch((err) => setError(err.message));
@@ -74,7 +77,7 @@ export default function Budget() {
                             🔍
                         </button>
                     </div>
-                    <ProgressBar ratio={status.fixed.ratio} label={`R$ ${status.fixed.spent.toFixed(2)} de R$ ${status.fixed.ceiling.toFixed(2)}`} />
+                    <ProgressBar ratio={status.fixed.ratio} label={`${formatCurrency(status.fixed.spent, hideValues)} de ${formatCurrency(status.fixed.ceiling, hideValues)}`} />
                 </section>
                 <section className="card">
                     <div className="budget-row-header">
@@ -84,7 +87,7 @@ export default function Budget() {
                             🔍
                         </button>
                     </div>
-                    <ProgressBar ratio={status.variable.ratio} label={`R$ ${status.variable.spent.toFixed(2)} de R$ ${status.variable.ceiling.toFixed(2)}`} />
+                    <ProgressBar ratio={status.variable.ratio} label={`${formatCurrency(status.variable.spent, hideValues)} de ${formatCurrency(status.variable.ceiling, hideValues)}`} />
                 </section>
             </div>
 
@@ -92,7 +95,7 @@ export default function Budget() {
                 <h2>Por categoria</h2>
                 {status.categories.map((cat) => (
                     <div key={cat.categoryId ?? 'none'} className={`budget-category-row ${cat.level !== 'OK' ? `budget-alert-${cat.level.toLowerCase()}` : ''}`}>
-                        <ProgressBar ratio={cat.ratio} label={`${cat.name} — R$ ${cat.spent.toFixed(2)} de R$ ${cat.limit.toFixed(2)}`} />
+                        <ProgressBar ratio={cat.ratio} label={`${cat.name} — ${formatCurrency(cat.spent, hideValues)} de ${formatCurrency(cat.limit, hideValues)}`} />
                         <button type="button" className="btn-icon" title="Ver gastos" aria-label={`Ver gastos de ${cat.name}`}
                             onClick={() => openCategoryDetail(cat)}>
                             🔍
@@ -138,7 +141,7 @@ export default function Budget() {
                                             <tr key={t.id}>
                                                 <td>{t.date}</td>
                                                 <td>{t.description || '-'}</td>
-                                                <td className="text-negative">R$ {Math.abs(t.amount).toFixed(2)}</td>
+                                                <td className="text-negative">{formatCurrency(Math.abs(t.amount), hideValues)}</td>
                                             </tr>
                                         ))}
                                     </tbody>

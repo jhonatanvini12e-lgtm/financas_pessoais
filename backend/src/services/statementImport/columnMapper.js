@@ -46,7 +46,14 @@ export function parseAmount(raw) {
     const hasDot = str.includes('.');
 
     if (hasComma && hasDot) {
-        str = str.replace(/\./g, '').replace(',', '.');
+        // Formato BR usa "." como separador de milhar e "," como decimal
+        // (ex: "1.234,56"), mas exports em formato US fazem o oposto (ex:
+        // "1,234.56"). Em vez de assumir sempre BR, detectamos o separador
+        // decimal pela posicao do ULTIMO separador na string -- o decimal e
+        // sempre o que aparece por ultimo, o de milhar se repete antes dele.
+        const decimalSep = str.lastIndexOf(',') > str.lastIndexOf('.') ? ',' : '.';
+        const thousandSep = decimalSep === ',' ? '.' : ',';
+        str = str.split(thousandSep).join('').replace(decimalSep, '.');
     } else if (hasComma) {
         str = str.replace(',', '.');
     }
@@ -68,9 +75,16 @@ export function normalizeDate(raw) {
 
     const brMatch = str.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2,4})/);
     if (brMatch) {
-        const [, day, month, yearRaw] = brMatch;
+        const [, dayRaw, monthRaw, yearRaw] = brMatch;
+        const day = Number(dayRaw);
+        const month = Number(monthRaw);
+        // Sem essa checagem, datas invalidas ou trocadas (ex: exports
+        // MM/DD/YYYY de fora do Brasil) seriam interpretadas como DD/MM/YYYY
+        // sem aviso e gravadas com o dia/mes invertidos ou uma data
+        // inexistente (ex: "13/25/2024").
+        if (month < 1 || month > 12 || day < 1 || day > 31) return null;
         const year = yearRaw.length === 2 ? `20${yearRaw}` : yearRaw;
-        return `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
+        return `${year}-${monthRaw.padStart(2, '0')}-${dayRaw.padStart(2, '0')}`;
     }
 
     const isoMatch = str.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);

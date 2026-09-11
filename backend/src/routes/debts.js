@@ -72,19 +72,30 @@ router.post('/:id/payments', (req, res) => {
     if (!debt) return res.status(404).json({ error: 'Divida nao encontrada' });
 
     const amount = Number(req.body.amount);
-    db.prepare('INSERT INTO debt_payments (debt_id, amount, note) VALUES (?, ?, ?)').run(debt.id, amount, req.body.note || null);
+    if (!Number.isFinite(amount) || amount <= 0) {
+        return res.status(400).json({ error: 'amount deve ser um numero positivo' });
+    }
+
     const newBalance = Math.max(debt.current_balance - amount, 0);
-    db.prepare('UPDATE debts SET current_balance = ?, status = ? WHERE id = ?').run(
-        newBalance,
-        newBalance === 0 ? 'PAID' : debt.status,
-        debt.id
-    );
+    const runPayment = db.transaction(() => {
+        db.prepare('INSERT INTO debt_payments (debt_id, amount, note) VALUES (?, ?, ?)').run(debt.id, amount, req.body.note || null);
+        db.prepare('UPDATE debts SET current_balance = ?, status = ? WHERE id = ?').run(
+            newBalance,
+            newBalance === 0 ? 'PAID' : debt.status,
+            debt.id
+        );
+    });
+    runPayment();
+
     res.json(db.prepare('SELECT * FROM debts WHERE id = ?').get(debt.id));
 });
 
 router.delete('/:id', (req, res) => {
-    const result = db.prepare('DELETE FROM debts WHERE id = ? AND user_id = ?').run(req.params.id, req.user.householdId);
-    if (result.changes === 0) return res.status(404).json({ error: 'Divida nao encontrada' });
+    const debt = db.prepare('SELECT * FROM debts WHERE id = ? AND user_id = ?').get(req.params.id, req.user.householdId);
+    if (!debt) return res.status(404).json({ error: 'Divida nao encontrada' });
+
+    db.prepare('DELETE FROM debt_payments WHERE debt_id = ?').run(debt.id);
+    db.prepare('DELETE FROM debts WHERE id = ?').run(debt.id);
     res.json({ ok: true });
 });
 
