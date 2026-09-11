@@ -40,6 +40,9 @@ app.get('/api/health', (req, res) => {
 app.use('/api/auth/login', loginRateLimiter);
 app.use('/api/auth/verify-2fa', twoFactorRateLimiter);
 app.use('/api/auth/request-reauth', reauthRateLimiter);
+app.use('/api/auth/send-email-code', twoFactorRateLimiter);
+app.use('/api/auth/webauthn/login-options', twoFactorRateLimiter);
+app.use('/api/auth/webauthn/login-verify', twoFactorRateLimiter);
 app.use('/api/auth', authRoutes);
 
 app.use('/api/accounts', authMiddleware, accountsRoutes);

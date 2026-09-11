@@ -5,9 +5,17 @@ export const CSRF_HEADER_NAME = 'x-csrf-token';
 
 const SAFE_METHODS = new Set(['GET', 'HEAD', 'OPTIONS']);
 
-// Login e verify-2fa nao tem cookie CSRF ainda (usuario nao autenticado) --
-// e' nesse momento que o cookie e' emitido, por isso ficam de fora da checagem.
-const EXEMPT_PATHS = new Set(['/api/auth/login', '/api/auth/verify-2fa']);
+// Login, verify-2fa e o par de login por biometria (webauthn) nao tem cookie
+// CSRF ainda (usuario nao autenticado) -- e' nesse momento que o cookie e'
+// emitido, por isso ficam de fora da checagem. send-email-code tambem fica de
+// fora por ser chamado no mesmo momento, ainda sem sessao.
+const EXEMPT_PATHS = new Set([
+    '/api/auth/login',
+    '/api/auth/verify-2fa',
+    '/api/auth/send-email-code',
+    '/api/auth/webauthn/login-options',
+    '/api/auth/webauthn/login-verify',
+]);
 
 export function generateCsrfToken() {
     return crypto.randomBytes(32).toString('hex');

@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { startRegistration } from '@simplewebauthn/browser';
 import { api } from '../api/client.js';
 import { useAuth } from '../context/AuthContext.jsx';
 
@@ -8,9 +9,41 @@ export default function Settings() {
     const [error, setError] = useState('');
     const [message, setMessage] = useState('');
     const [passwordForm, setPasswordForm] = useState({ currentPassword: '', newPassword: '' });
+    const [webauthnDevices, setWebauthnDevices] = useState([]);
+    const [registeringDevice, setRegisteringDevice] = useState(false);
 
     const loadBackups = () => { api.get('/backups').then(setBackups).catch((err) => setError(err.message)); };
     useEffect(loadBackups, []);
+
+    const loadWebauthnDevices = () => { api.get('/auth/webauthn/devices').then(setWebauthnDevices).catch(() => {}); };
+    useEffect(loadWebauthnDevices, []);
+
+    const registerThisDevice = async () => {
+        setError('');
+        setMessage('');
+        setRegisteringDevice(true);
+        try {
+            const optionsJSON = await api.post('/auth/webauthn/register-options');
+            const attestation = await startRegistration({ optionsJSON });
+            await api.post('/auth/webauthn/register-verify', attestation);
+            setMessage('Biometria ativada neste dispositivo. Da proxima vez, o login vai pedir a digital em vez do codigo por e-mail.');
+            loadWebauthnDevices();
+        } catch (err) {
+            setError(err.message || 'Nao foi possivel registrar a biometria neste dispositivo.');
+        } finally {
+            setRegisteringDevice(false);
+        }
+    };
+
+    const removeWebauthnDevice = async (id) => {
+        setError('');
+        try {
+            await api.delete(`/auth/webauthn/devices/${id}`);
+            loadWebauthnDevices();
+        } catch (err) {
+            setError(err.message);
+        }
+    };
 
     const changePassword = async (e) => {
         e.preventDefault();
@@ -45,6 +78,33 @@ export default function Settings() {
                 <h2>Perfil</h2>
                 <p>Usuario: {user?.username}</p>
                 <p>E-mail: {user?.email}</p>
+            </section>
+
+            <section className="card">
+                <h2>Biometria (login sem e-mail)</h2>
+                <p className="muted">
+                    Registre este aparelho para entrar com digital ou reconhecimento facial em vez de esperar o
+                    codigo por e-mail. Funciona apenas neste navegador/dispositivo especifico.
+                </p>
+                <button className="btn-primary" onClick={registerThisDevice} disabled={registeringDevice}>
+                    {registeringDevice ? 'Aguardando biometria...' : 'Ativar biometria neste dispositivo'}
+                </button>
+                {webauthnDevices.length > 0 && (
+                    <div className="table-scroll">
+                        <table className="data-table">
+                            <thead><tr><th>Registrado em</th><th>Ultimo uso</th><th></th></tr></thead>
+                            <tbody>
+                                {webauthnDevices.map((d) => (
+                                    <tr key={d.id}>
+                                        <td>{d.created_at}</td>
+                                        <td>{d.last_used_at || 'Nunca usado'}</td>
+                                        <td><button className="btn-link" onClick={() => removeWebauthnDevice(d.id)}>Remover</button></td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    </div>
+                )}
             </section>
 
             <section className="card">

@@ -19,6 +19,24 @@ CREATE TABLE IF NOT EXISTS known_devices (
     UNIQUE(user_id, fingerprint)
 );
 
+-- Uma linha por passkey (biometria/Touch ID/Face ID) registrada para um
+-- usuario. device_fingerprint prende a credencial ao mesmo par
+-- User-Agent+IP usado em known_devices, para que o login com biometria so
+-- seja oferecido nesse dispositivo especifico (nao a conta toda).
+CREATE TABLE IF NOT EXISTS webauthn_credentials (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL,
+    credential_id TEXT UNIQUE NOT NULL,
+    public_key TEXT NOT NULL,
+    counter INTEGER NOT NULL DEFAULT 0,
+    device_fingerprint TEXT NOT NULL,
+    transports TEXT,
+    label TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    last_used_at DATETIME,
+    FOREIGN KEY(user_id) REFERENCES users(id)
+);
+
 CREATE TABLE IF NOT EXISTS sessions (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     user_id INTEGER NOT NULL,

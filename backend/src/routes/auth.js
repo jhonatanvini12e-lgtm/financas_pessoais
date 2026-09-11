@@ -1,38 +1,22 @@
 import express from 'express';
-import crypto from 'crypto';
 import bcrypt from 'bcryptjs';
-import jwt from 'jsonwebtoken';
 import db from '../db/index.js';
 import { authMiddleware } from '../middleware/auth.js';
 import { send2FACode, sendNewDeviceAlert, sendInactivityReauthCode } from '../services/emailService.js';
-import budgetParams from '../config/budgetParams.js';
 import {
-    JWT_SECRET,
-    JWT_EXPIRES_IN,
-    AUTH_COOKIE_NAME,
-    authCookieOptions,
-    clearAuthCookieOptions,
-} from '../config/jwt.js';
-import { CSRF_COOKIE_NAME, generateCsrfToken } from '../middleware/csrf.js';
+    deviceFingerprint,
+    issueTwoFactorCode,
+    hasWebauthnCredential,
+    twoFactorStore,
+    completeLogin,
+} from '../services/deviceAuth.js';
+import { AUTH_COOKIE_NAME, clearAuthCookieOptions } from '../config/jwt.js';
+import { CSRF_COOKIE_NAME } from '../middleware/csrf.js';
+import webauthnRoutes from './webauthn.js';
 
 const router = express.Router();
 
-// codigo -> { userId, expires, reason }
-const twoFactorStore = new Map();
-
-const TWO_FACTOR_CODE_EXPIRY_MS = budgetParams.twoFactorCodeExpiryMinutes * 60000;
-
-function deviceFingerprint(req) {
-    const ua = req.headers['user-agent'] || 'unknown';
-    const ip = req.ip || req.socket.remoteAddress || 'unknown';
-    return crypto.createHash('sha256').update(`${ua}::${ip}`).digest('hex');
-}
-
-function issueTwoFactorCode(userId, fingerprint) {
-    const code = Math.floor(100000 + Math.random() * 900000).toString();
-    twoFactorStore.set(userId, { code, expires: Date.now() + TWO_FACTOR_CODE_EXPIRY_MS, fingerprint });
-    return code;
-}
+router.use('/webauthn', webauthnRoutes);
 
 router.post('/login', async (req, res) => {
     const { username, password } = req.body;
@@ -47,7 +31,14 @@ router.post('/login', async (req, res) => {
         .prepare('SELECT id FROM known_devices WHERE user_id = ? AND fingerprint = ?')
         .get(user.id, fingerprint);
 
+    // Sempre gera o codigo (fica de reserva), mas so manda por e-mail se este
+    // dispositivo nao tiver biometria (WebAuthn) registrada -- nesse caso o
+    // front pede a digital direto, sem depender do e-mail.
     const code = issueTwoFactorCode(user.id, fingerprint);
+
+    if (hasWebauthnCredential(user.id, fingerprint)) {
+        return res.json({ userId: user.id, newDevice: false, method: 'webauthn' });
+    }
 
     if (knownDevice) {
         send2FACode(user.email, code);
@@ -55,7 +46,28 @@ router.post('/login', async (req, res) => {
         sendNewDeviceAlert(user.email, code);
     }
 
-    res.json({ message: 'Codigo 2FA enviado para seu e-mail.', userId: user.id, newDevice: !knownDevice });
+    res.json({
+        message: 'Codigo 2FA enviado para seu e-mail.',
+        userId: user.id,
+        newDevice: !knownDevice,
+        method: 'email',
+    });
+});
+
+// Fallback para quando o login sinalizou method: 'webauthn' mas a biometria
+// falhou/foi cancelada no dispositivo -- reenvia por e-mail o mesmo codigo
+// que ja tinha sido gerado (sem reservado) em /login.
+router.post('/send-email-code', (req, res) => {
+    const { userId } = req.body;
+    const store = twoFactorStore.get(userId);
+    const user = store && db.prepare('SELECT * FROM users WHERE id = ?').get(userId);
+
+    if (store && user) {
+        send2FACode(user.email, store.code);
+    }
+
+    // Resposta identica em qualquer caso, para nao permitir enumeracao de userId.
+    res.json({ message: 'Se a sessao ainda for valida, um codigo foi enviado por e-mail.' });
 });
 
 router.post('/request-reauth', (req, res) => {
@@ -81,25 +93,7 @@ router.post('/verify-2fa', (req, res) => {
     twoFactorStore.delete(userId);
 
     const fingerprint = store.fingerprint || deviceFingerprint(req);
-    db.prepare(
-        `INSERT INTO known_devices (user_id, fingerprint, last_seen) VALUES (?, ?, CURRENT_TIMESTAMP)
-         ON CONFLICT(user_id, fingerprint) DO UPDATE SET last_seen = CURRENT_TIMESTAMP`
-    ).run(userId, fingerprint);
-
-    const jti = crypto.randomUUID();
-    db.prepare('INSERT INTO sessions (user_id, jti, device_fingerprint) VALUES (?, ?, ?)').run(
-        userId,
-        jti,
-        fingerprint
-    );
-    db.prepare('UPDATE users SET last_login = CURRENT_TIMESTAMP WHERE id = ?').run(userId);
-
-    const token = jwt.sign({ jti }, JWT_SECRET, { expiresIn: JWT_EXPIRES_IN });
-    const cookieOptions = authCookieOptions();
-    res.cookie(AUTH_COOKIE_NAME, token, cookieOptions);
-    // Cookie CSRF precisa ser legivel por JS (nao-httpOnly) para o front devolver
-    // o valor num header customizado a cada request que altera estado.
-    res.cookie(CSRF_COOKIE_NAME, generateCsrfToken(), { ...cookieOptions, httpOnly: false });
+    completeLogin(userId, fingerprint, res);
     res.json({ message: 'Autenticado com sucesso' });
 });
 

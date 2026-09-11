@@ -6,6 +6,7 @@
     "start": "node src/server.js"
   },
   "dependencies": {
+    "@simplewebauthn/server": "^14.0.1",
     "bcryptjs": "^2.4.3",
     "better-sqlite3-multiple-ciphers": "^13.0.3",
     "cookie-parser": "^1.4.7",
