@@ -299,16 +299,32 @@ async function askAIForTransactions(statementText, categoryNames) {
 
 // Procura um "total da fatura"/"total a pagar" identificavel no texto para
 // servir de checagem de sanidade contra a soma dos lancamentos que a IA
-// extraiu (ver checkInvoiceTotalDivergence). So aceita a primeira ocorrencia
-// -- suficiente pro cabecalho/resumo tipico de fatura, onde o total aparece
-// perto do rotulo.
-const INVOICE_TOTAL_PATTERN = /(total\s+(?:desta\s+|da\s+)?fatura|total\s+a\s+pagar|valor\s+total)[\s\S]{0,20}?(-?\s*R\$\s*[\d.,]+|-?\d[\d.,]*\d)/i;
+// extraiu (ver checkInvoiceTotalDivergence). Testados em ordem de
+// especificidade (nao de posicao no texto): faturas de cartao costumam trazer
+// um box de "Parcelamento de Fatura" oferecendo parcelar o valor com juros,
+// que tambem contem um rotulo "Total a Pagar" -- so que ali o valor e o custo
+// total do parcelamento (maior, com juros), nao o valor da fatura atual. Se
+// combinassemos todos os rotulos numa unica alternancia e pegassemos so a
+// primeira ocorrencia no texto, esse "Total a Pagar" do box promocional podia
+// vencer o rotulo correto. Por isso "valor desta fatura"/"total da fatura",
+// que so aparecem se referindo ao valor real da fatura, tem prioridade sobre
+// "total a pagar"/"valor total", que sao mais genericos e aparecem tambem
+// nesses boxes promocionais.
+const INVOICE_TOTAL_PATTERNS = [
+    /valor\s+desta\s+fatura[\s\S]{0,20}?(-?\s*R\$\s*[\d.,]+|-?\d[\d.,]*\d)/i,
+    /total\s+(?:desta\s+|da\s+)?fatura[\s\S]{0,20}?(-?\s*R\$\s*[\d.,]+|-?\d[\d.,]*\d)/i,
+    /total\s+a\s+pagar[\s\S]{0,20}?(-?\s*R\$\s*[\d.,]+|-?\d[\d.,]*\d)/i,
+    /valor\s+total[\s\S]{0,20}?(-?\s*R\$\s*[\d.,]+|-?\d[\d.,]*\d)/i,
+];
 
 function extractInvoiceTotal(text) {
-    const match = text.match(INVOICE_TOTAL_PATTERN);
-    if (!match) return null;
-    const value = parseAmount(match[2]);
-    return Number.isFinite(value) && value !== 0 ? Math.abs(value) : null;
+    for (const pattern of INVOICE_TOTAL_PATTERNS) {
+        const match = text.match(pattern);
+        if (!match) continue;
+        const value = parseAmount(match[1]);
+        if (Number.isFinite(value) && value !== 0) return Math.abs(value);
+    }
+    return null;
 }
 
 // Aviso (nao bloqueia a importacao) quando o total identificado na fatura
@@ -360,8 +376,15 @@ export async function parsePdf(buffer, categoryNames = [], password) {
             `O texto do PDF passou de ${MAX_STATEMENT_CHARS.toLocaleString('pt-BR')} caracteres e foi cortado antes de ir para a IA -- o extrato pode estar incompleto. Confira se todos os lancamentos da fatura foram importados.`
         );
     }
-    const divergenceWarning = checkInvoiceTotalDivergence(extractInvoiceTotal(text), transactions);
+    // Valor impresso na propria fatura (ex: "Total a pagar: R$ 1.228,23") --
+    // usado tanto pro aviso de divergencia abaixo quanto, mais importante,
+    // como o valor que vai direto pro Contas a Pagar (ver
+    // registerCardInvoiceFromImport): mais confiavel que somar os lancamentos
+    // extraidos, que pode ficar errado se a IA nao pegar todas as linhas ou se
+    // o ciclo da fatura for calculado errado a partir das datas importadas.
+    const invoiceTotal = extractInvoiceTotal(text);
+    const divergenceWarning = checkInvoiceTotalDivergence(invoiceTotal, transactions);
     if (divergenceWarning) warnings.push(divergenceWarning);
 
-    return { transactions, warnings };
+    return { transactions, warnings, invoiceTotal };
 }

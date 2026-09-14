@@ -20,6 +20,8 @@ export default function Bills() {
     const [categories, setCategories] = useState([]);
     const [error, setError] = useState('');
     const [form, setForm] = useState(EMPTY_FORM);
+    const [editingBillId, setEditingBillId] = useState(null);
+    const [editAmount, setEditAmount] = useState('');
     const { hideValues } = usePrivacy();
 
     const load = ({ silent = false } = {}) => {
@@ -62,6 +64,32 @@ export default function Bills() {
         try {
             const base = item.kind === 'CARD_INVOICE' ? `/bills/card-invoices/${item.id}` : `/bills/${item.id}`;
             await api.post(`${base}/${item.paid ? 'unpay' : 'pay'}`, { period: item.period });
+            load();
+        } catch (err) {
+            setError(err.message);
+        }
+    };
+
+    const startEditAmount = (item) => {
+        setEditingBillId(item.id);
+        setEditAmount(String(item.expectedAmount));
+    };
+
+    const cancelEditAmount = () => {
+        setEditingBillId(null);
+        setEditAmount('');
+    };
+
+    const saveEditAmount = async (id) => {
+        const value = Number(editAmount);
+        if (!Number.isFinite(value)) {
+            setError('Valor invalido');
+            return;
+        }
+        try {
+            await api.put(`/bills/${id}`, { expected_amount: value });
+            setEditingBillId(null);
+            setEditAmount('');
             load();
         } catch (err) {
             setError(err.message);
@@ -117,7 +145,29 @@ export default function Bills() {
                                     <td>{item.name}</td>
                                     <td>{item.categoryName || '-'}</td>
                                     <td>{TYPE_LABEL[typeKeyFor(item)]}</td>
-                                    <td>{formatCurrency(item.expectedAmount, hideValues)}</td>
+                                    <td>
+                                        {item.kind === 'BILL' && editingBillId === item.id ? (
+                                            <span className="inline-edit">
+                                                <input
+                                                    type="number"
+                                                    step="0.01"
+                                                    value={editAmount}
+                                                    onChange={(e) => setEditAmount(e.target.value)}
+                                                    style={{ width: 90 }}
+                                                    autoFocus
+                                                />
+                                                <button className="btn-link" style={{ marginLeft: 6 }} onClick={() => saveEditAmount(item.id)}>salvar</button>
+                                                <button className="btn-link" style={{ marginLeft: 6 }} onClick={cancelEditAmount}>cancelar</button>
+                                            </span>
+                                        ) : (
+                                            <>
+                                                {formatCurrency(item.expectedAmount, hideValues)}
+                                                {item.kind === 'BILL' && (
+                                                    <button className="btn-link" style={{ marginLeft: 6 }} onClick={() => startEditAmount(item)}>editar</button>
+                                                )}
+                                            </>
+                                        )}
+                                    </td>
                                     <td>{item.dueDate}</td>
                                     <td><span className={`badge-status ${STATUS_CLASS[item.status]}`}>{STATUS_LABEL[item.status]}</span></td>
                                     <td>

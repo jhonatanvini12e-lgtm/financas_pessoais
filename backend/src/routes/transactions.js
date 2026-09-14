@@ -7,6 +7,7 @@ import { parseStatementFile, SUPPORTED_STATEMENT_EXTENSIONS } from '../services/
 import { addMonths } from '../services/statementImport/columnMapper.js';
 import { checkBudgetAlerts } from '../services/budgetEngine.js';
 import { registerCardInvoiceFromImport } from '../services/billsService.js';
+import { getCurrentInvoicePeriod } from '../services/cardService.js';
 
 const router = express.Router();
 
@@ -54,7 +55,7 @@ function uploadStatementFile(req, res, next) {
 }
 
 router.get('/', (req, res) => {
-    const { start, end, category_id, account_id, card_id } = req.query;
+    const { start, end, category_id, account_id, card_id, created_by } = req.query;
     let query = 'SELECT * FROM transactions WHERE user_id = ?';
     const params = [req.user.householdId];
 
@@ -63,10 +64,21 @@ router.get('/', (req, res) => {
     if (category_id) { query += ' AND category_id = ?'; params.push(category_id); }
     if (account_id) { query += ' AND account_id = ?'; params.push(account_id); }
     if (card_id) { query += ' AND card_id = ?'; params.push(card_id); }
+    if (created_by) { query += ' AND created_by = ?'; params.push(created_by); }
     query += ' ORDER BY date DESC LIMIT 500';
 
     res.json(db.prepare(query).all(...params));
 });
+
+// Confere que o usuario indicado como "quem realizou o gasto" pertence ao
+// mesmo household de quem esta autenticado (o dono ou alguem vinculado a
+// ele) -- impede marcar um lancamento com o id de uma conta qualquer.
+function isHouseholdMember(userId, householdId) {
+    if (userId == null) return false;
+    return Boolean(
+        db.prepare('SELECT 1 FROM users WHERE id = ? AND (id = ? OR household_id = ?)').get(userId, householdId, householdId)
+    );
+}
 
 router.get('/compare', (req, res) => {
     const months = Number(req.query.months) === 6 ? 6 : 3;
@@ -122,7 +134,7 @@ function isPlausibleTransactionDate(dateStr) {
 }
 
 router.post('/', (req, res) => {
-    const { account_id, card_id, category_id, amount, date, description, installments } = req.body;
+    const { account_id, card_id, category_id, amount, date, description, installments, created_by } = req.body;
     if (amount == null || !date) return res.status(400).json({ error: 'amount e date sao obrigatorios' });
 
     const numericAmount = Number(amount);
@@ -144,13 +156,17 @@ router.post('/', (req, res) => {
     if (category_id != null && !db.prepare('SELECT 1 FROM categories WHERE id = ? AND user_id = ?').get(category_id, req.user.householdId)) {
         return res.status(400).json({ error: 'Categoria invalida' });
     }
+    if (created_by != null && !isHouseholdMember(created_by, req.user.householdId)) {
+        return res.status(400).json({ error: 'Usuario invalido' });
+    }
 
     const resolvedCategory = category_id ?? categorize(req.user.householdId, description);
+    const resolvedCreatedBy = created_by || req.user.id;
     const totalInstallments = Math.min(Math.max(Number(installments) || 1, 1), 120);
 
     const insert = db.prepare(
-        `INSERT INTO transactions (user_id, account_id, card_id, category_id, amount, date, description, status, source, installment_group, installment_number, installment_total)
-         VALUES (?, ?, ?, ?, ?, ?, ?, 'CLEARED', 'MANUAL', ?, ?, ?)`
+        `INSERT INTO transactions (user_id, account_id, card_id, category_id, amount, date, description, status, source, installment_group, installment_number, installment_total, created_by)
+         VALUES (?, ?, ?, ?, ?, ?, ?, 'CLEARED', 'MANUAL', ?, ?, ?, ?)`
     );
 
     const installmentGroup = totalInstallments > 1 ? crypto.randomUUID() : null;
@@ -170,7 +186,8 @@ router.post('/', (req, res) => {
                 installmentDescription,
                 installmentGroup,
                 totalInstallments > 1 ? i + 1 : null,
-                totalInstallments > 1 ? totalInstallments : null
+                totalInstallments > 1 ? totalInstallments : null,
+                resolvedCreatedBy
             );
             createdIds.push(info.lastInsertRowid);
         }
@@ -192,7 +209,7 @@ router.put('/:id', (req, res) => {
     const txn = db.prepare('SELECT * FROM transactions WHERE id = ? AND user_id = ?').get(req.params.id, req.user.householdId);
     if (!txn) return res.status(404).json({ error: 'Transacao nao encontrada' });
 
-    const { account_id, card_id, category_id, amount, date, description, status } = req.body;
+    const { account_id, card_id, category_id, amount, date, description, status, created_by } = req.body;
 
     if (account_id != null && !db.prepare('SELECT 1 FROM accounts WHERE id = ? AND user_id = ?').get(account_id, req.user.householdId)) {
         return res.status(400).json({ error: 'Conta invalida' });
@@ -203,6 +220,9 @@ router.put('/:id', (req, res) => {
     if (category_id != null && !db.prepare('SELECT 1 FROM categories WHERE id = ? AND user_id = ?').get(category_id, req.user.householdId)) {
         return res.status(400).json({ error: 'Categoria invalida' });
     }
+    if (created_by != null && !isHouseholdMember(created_by, req.user.householdId)) {
+        return res.status(400).json({ error: 'Usuario invalido' });
+    }
     if (date !== undefined && !isPlausibleTransactionDate(date)) {
         return res.status(400).json({
             error: `date deve estar entre ${TRANSACTION_DATE_MAX_YEARS_PAST} anos no passado e ${TRANSACTION_DATE_MAX_MONTHS_AHEAD} meses no futuro`,
@@ -210,7 +230,7 @@ router.put('/:id', (req, res) => {
     }
 
     db.prepare(
-        `UPDATE transactions SET account_id = ?, card_id = ?, category_id = ?, amount = ?, date = ?, description = ?, status = ?
+        `UPDATE transactions SET account_id = ?, card_id = ?, category_id = ?, amount = ?, date = ?, description = ?, status = ?, created_by = ?
          WHERE id = ?`
     ).run(
         account_id !== undefined ? account_id : txn.account_id,
@@ -220,6 +240,7 @@ router.put('/:id', (req, res) => {
         date ?? txn.date,
         description !== undefined ? description : txn.description,
         status ?? txn.status,
+        created_by !== undefined ? created_by : txn.created_by,
         txn.id
     );
     const updated = db.prepare('SELECT * FROM transactions WHERE id = ?').get(txn.id);
@@ -254,12 +275,13 @@ router.post('/import-statement/preview', uploadStatementFile, async (req, res) =
 
     let parsed;
     let warnings;
+    let invoiceTotal;
     try {
         // Passa os nomes das categorias do usuario para que, no caso de PDF, a
         // mesma IA que le a fatura ja sugira uma categoria por lancamento com
         // base na descricao (ex: "LONDRISUL TRANSPORTE C" -> "Transporte").
         // `password` so e usado no caminho do PDF, para faturas protegidas.
-        ({ transactions: parsed, warnings } = await parseStatementFile(
+        ({ transactions: parsed, warnings, invoiceTotal } = await parseStatementFile(
             req.file.originalname,
             req.file.buffer,
             categories.map((c) => c.name),
@@ -313,13 +335,16 @@ router.post('/import-statement/preview', uploadStatementFile, async (req, res) =
         };
     });
 
-    res.json({ filename: req.file.originalname, transactions: preview, warnings });
+    res.json({ filename: req.file.originalname, transactions: preview, warnings, invoiceTotal });
 });
 
 router.post('/import-statement/commit', (req, res) => {
-    const { account_id, card_id, filename, transactions } = req.body;
+    const { account_id, card_id, filename, transactions, created_by, invoice_total } = req.body;
     if (!Array.isArray(transactions) || transactions.length === 0) {
         return res.status(400).json({ error: 'Nenhum lancamento para importar' });
+    }
+    if (invoice_total != null && (!Number.isFinite(Number(invoice_total)) || Number(invoice_total) <= 0)) {
+        return res.status(400).json({ error: 'invoice_total deve ser um numero positivo' });
     }
 
     if (account_id != null && !db.prepare('SELECT 1 FROM accounts WHERE id = ? AND user_id = ?').get(account_id, req.user.householdId)) {
@@ -328,10 +353,16 @@ router.post('/import-statement/commit', (req, res) => {
     if (card_id != null && !db.prepare('SELECT 1 FROM credit_cards WHERE id = ? AND user_id = ?').get(card_id, req.user.householdId)) {
         return res.status(400).json({ error: 'Cartao invalido' });
     }
+    // Quem realizou os gastos deste lote precisa ser informado antes de
+    // importar (nao ha um default razoavel: quem esta logado nao e
+    // necessariamente quem fez as compras da fatura importada).
+    if (!isHouseholdMember(created_by, req.user.householdId)) {
+        return res.status(400).json({ error: 'Selecione qual usuario realizou esses gastos antes de importar' });
+    }
 
     const insertTxn = db.prepare(
-        `INSERT INTO transactions (user_id, account_id, card_id, category_id, amount, date, description, status, external_fitid, source, installment_group, installment_number, installment_total)
-         VALUES (?, ?, ?, ?, ?, ?, ?, 'CLEARED', ?, 'STATEMENT_IMPORT', ?, ?, ?)`
+        `INSERT INTO transactions (user_id, account_id, card_id, category_id, amount, date, description, status, external_fitid, source, installment_group, installment_number, installment_total, created_by)
+         VALUES (?, ?, ?, ?, ?, ?, ?, 'CLEARED', ?, 'STATEMENT_IMPORT', ?, ?, ?, ?)`
     );
 
     // Pre-carregados uma vez para o lote inteiro em vez de uma query por
@@ -350,7 +381,13 @@ router.post('/import-statement/commit', (req, res) => {
     let imported = 0;
     let skipped = 0;
     let generatedInstallments = 0;
-    let latestTxnDate = null;
+    // Datas originais (uma por lancamento importado, antes da expansao de
+    // parcelas futuras) usadas depois para descobrir em quais ciclos de fatura
+    // esse lote cai. Nao usamos so a data mais recente do lote: um unico
+    // lancamento com data errada (ex: erro de digitacao/parser) bastaria para
+    // arrastar o registro da fatura inteira pro ciclo errado (ver
+    // registerCardInvoiceFromImport abaixo).
+    const importedTxnDates = [];
 
     const runImport = db.transaction((rows) => {
         for (const txn of rows) {
@@ -359,7 +396,7 @@ router.post('/import-statement/commit', (req, res) => {
             if (!txn.date || !Number.isFinite(amount) || amount === 0 || !description) { skipped += 1; continue; }
             if (!isPlausibleTransactionDate(txn.date)) { skipped += 1; continue; }
             if (txn.category_id != null && !validCategoryIds.has(txn.category_id)) { skipped += 1; continue; }
-            if (!latestTxnDate || txn.date > latestTxnDate) latestTxnDate = txn.date;
+            importedTxnDates.push(txn.date);
 
             // Revalida duplicidade na hora de gravar (o preview so' checou no
             // momento em que o arquivo foi lido -- outra importacao pode ter
@@ -389,7 +426,8 @@ router.post('/import-statement/commit', (req, res) => {
                     num === startNumber ? txn.fitid || null : null,
                     installmentGroup,
                     isInstallment ? num : null,
-                    isInstallment ? totalInstallments : null
+                    isInstallment ? totalInstallments : null,
+                    created_by
                 );
                 if (num === startNumber) imported += 1;
                 else generatedInstallments += 1;
@@ -405,15 +443,59 @@ router.post('/import-statement/commit', (req, res) => {
 
     checkBudgetAlerts(req.user.householdId);
 
-    // Fatura importada: registra automaticamente em Contas a Pagar (valor +
-    // vencimento), usando a data dos proprios lancamentos para achar o ciclo
-    // certo -- funciona mesmo para uma fatura de mes anterior ja fechada.
-    let registeredBillId = null;
-    if (card_id && imported > 0 && latestTxnDate) {
-        registeredBillId = registerCardInvoiceFromImport(req.user.householdId, card_id, new Date(latestTxnDate));
+    // Fatura importada: registra automaticamente em Contas a Pagar.
+    const registeredBillIds = [];
+    if (card_id && imported > 0 && importedTxnDates.length > 0) {
+        const card = db.prepare('SELECT * FROM credit_cards WHERE id = ? AND user_id = ?').get(card_id, req.user.householdId);
+        if (card) {
+            const dueDateGroups = new Map(); // dueDate (YYYY-MM-DD) -> { referenceDate, count }
+            for (const dateStr of importedTxnDates) {
+                const { dueDate } = getCurrentInvoicePeriod(card.closing_day, card.due_day, new Date(`${dateStr}T12:00:00`));
+                const key = dueDate.toISOString().slice(0, 10);
+                const group = dueDateGroups.get(key);
+                if (group) group.count += 1;
+                else dueDateGroups.set(key, { referenceDate: dateStr, count: 1 });
+            }
+
+            if (invoice_total != null) {
+                // Valor lido direto da fatura (impresso no PDF ou confirmado
+                // manualmente pelo usuario na tela de revisao): mais confiavel
+                // que somar os lancamentos importados por periodo, entao vira
+                // o valor exato do lancamento -- um unico registro em Contas a
+                // Pagar por fatura, no ciclo predominante entre as datas do
+                // lote (evita que uma unica data errada decida o ciclo).
+                let bestKey = null;
+                for (const [key, group] of dueDateGroups) {
+                    if (!bestKey || group.count > dueDateGroups.get(bestKey).count) bestKey = key;
+                }
+                const referenceDateStr = dueDateGroups.get(bestKey).referenceDate;
+                const billId = registerCardInvoiceFromImport(
+                    req.user.householdId,
+                    card_id,
+                    new Date(`${referenceDateStr}T12:00:00`),
+                    Number(invoice_total)
+                );
+                if (billId) registeredBillIds.push(billId);
+            } else {
+                // Sem um valor confirmado: melhor esforco somando os
+                // lancamentos por ciclo (um registro por ciclo distinto
+                // presente no lote, ver registerCardInvoiceFromImport).
+                for (const group of dueDateGroups.values()) {
+                    const billId = registerCardInvoiceFromImport(req.user.householdId, card_id, new Date(`${group.referenceDate}T12:00:00`));
+                    if (billId) registeredBillIds.push(billId);
+                }
+            }
+        }
     }
 
-    res.json({ imported, skipped, generatedInstallments, total: transactions.length, registeredBillId });
+    res.json({
+        imported,
+        skipped,
+        generatedInstallments,
+        total: transactions.length,
+        registeredBillId: registeredBillIds[0] ?? null,
+        registeredBillIds,
+    });
 });
 
 // Aplica o aprendizado por historico (ver categorizationEngine.js) aos

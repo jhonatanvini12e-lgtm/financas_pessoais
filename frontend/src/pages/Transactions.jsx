@@ -2,6 +2,7 @@ import { Fragment, useEffect, useState } from 'react';
 import { api } from '../api/client.js';
 import { usePolling } from '../hooks/usePolling.js';
 import { usePrivacy } from '../context/PrivacyContext.jsx';
+import { useAuth } from '../context/AuthContext.jsx';
 import { formatCurrency } from '../utils/currency.js';
 import { PROVIDER_LABELS } from '../constants/providers.js';
 
@@ -33,21 +34,31 @@ function bankNameForTxn(t, accountsById, cardsById) {
 }
 
 export default function Transactions() {
+    const { user } = useAuth();
     const [transactions, setTransactions] = useState([]);
     const [categories, setCategories] = useState([]);
     const [accounts, setAccounts] = useState([]);
     const [cards, setCards] = useState([]);
+    const [members, setMembers] = useState([]);
     const [error, setError] = useState('');
     const [filters, setFilters] = useState({ start: '', end: '', category_id: '' });
     const [bankFilter, setBankFilter] = useState('');
+    const [userFilter, setUserFilter] = useState('');
     const [search, setSearch] = useState('');
-    const [form, setForm] = useState({ description: '', amount: '', date: '', category_id: '', destination_type: 'none', destination_id: '', parcelado: false, installments: 2 });
+    const [form, setForm] = useState({ description: '', amount: '', date: '', category_id: '', destination_type: 'none', destination_id: '', parcelado: false, installments: 2, created_by: '' });
     const [editingTxn, setEditingTxn] = useState(null);
-    const [editForm, setEditForm] = useState({ description: '', amount: '', date: '', category_id: '', destination_type: 'none', destination_id: '' });
+    const [editForm, setEditForm] = useState({ description: '', amount: '', date: '', category_id: '', destination_type: 'none', destination_id: '', created_by: '' });
     const [editError, setEditError] = useState('');
     const [recategorizing, setRecategorizing] = useState(false);
     const [recategorizeMsg, setRecategorizeMsg] = useState('');
     const { hideValues } = usePrivacy();
+
+    // Pre-seleciona o proprio usuario logado no formulario de novo lancamento
+    // assim que ele carrega, sem sobrescrever uma escolha ja feita.
+    useEffect(() => {
+        if (user && !form.created_by) setForm((f) => ({ ...f, created_by: String(user.id) }));
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [user]);
 
     const load = ({ silent = false } = {}) => {
         const params = new URLSearchParams();
@@ -63,6 +74,7 @@ export default function Transactions() {
         api.get('/categories').then(setCategories).catch(() => {});
         api.get('/accounts').then(setAccounts).catch(() => {});
         api.get('/cards').then(setCards).catch(() => {});
+        api.get('/auth/household-members').then(setMembers).catch(() => {});
     }, []);
 
     const destinationOptions = (type) => (type === 'account' ? accounts : type === 'card' ? cards : []);
@@ -72,6 +84,8 @@ export default function Transactions() {
 
     const accountsById = new Map(accounts.map((a) => [a.id, a]));
     const cardsById = new Map(cards.map((c) => [c.id, c]));
+    const membersById = new Map(members.map((m) => [m.id, m]));
+    const memberName = (id) => membersById.get(Number(id))?.username || '-';
 
     const bankOptions = Array.from(
         new Set([
@@ -86,6 +100,7 @@ export default function Transactions() {
     // /transactions) entao nao ha necessidade de ida ao servidor pra isso.
     const visibleTransactions = transactions.filter((t) => {
         if (bankFilter && bankNameForTxn(t, accountsById, cardsById) !== bankFilter) return false;
+        if (userFilter && String(t.created_by || '') !== userFilter) return false;
         if (search.trim() && !t.description?.toLowerCase().includes(search.trim().toLowerCase())) return false;
         return true;
     });
@@ -101,8 +116,9 @@ export default function Transactions() {
                 account_id: form.destination_type === 'account' ? form.destination_id || null : null,
                 card_id: form.destination_type === 'card' ? form.destination_id || null : null,
                 installments: form.parcelado ? Number(form.installments) : 1,
+                created_by: form.created_by || null,
             });
-            setForm({ description: '', amount: '', date: '', category_id: '', destination_type: 'none', destination_id: '', parcelado: false, installments: 2 });
+            setForm({ description: '', amount: '', date: '', category_id: '', destination_type: 'none', destination_id: '', parcelado: false, installments: 2, created_by: user ? String(user.id) : '' });
             load();
         } catch (err) {
             setError(err.message);
@@ -125,6 +141,7 @@ export default function Transactions() {
             category_id: t.category_id || '',
             destination_type: t.account_id ? 'account' : t.card_id ? 'card' : 'none',
             destination_id: t.account_id || t.card_id || '',
+            created_by: t.created_by ? String(t.created_by) : '',
         });
         setEditError('');
     };
@@ -162,6 +179,7 @@ export default function Transactions() {
                 category_id: editForm.category_id || null,
                 account_id: editForm.destination_type === 'account' ? editForm.destination_id || null : null,
                 card_id: editForm.destination_type === 'card' ? editForm.destination_id || null : null,
+                created_by: editForm.created_by || null,
             });
             closeEdit();
             load();
@@ -186,6 +204,10 @@ export default function Transactions() {
                     <select value={form.category_id} onChange={(e) => setForm({ ...form, category_id: e.target.value })}>
                         <option value="">Auto-categorizar</option>
                         {categories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+                    </select>
+                    <select value={form.created_by} onChange={(e) => setForm({ ...form, created_by: e.target.value })}>
+                        <option value="">Quem gastou?</option>
+                        {members.map((m) => <option key={m.id} value={m.id}>{m.username}</option>)}
                     </select>
                     <select value={form.destination_type}
                         onChange={(e) => setForm({ ...form, destination_type: e.target.value, destination_id: '' })}>
@@ -232,6 +254,10 @@ export default function Transactions() {
                         <option value="">Todos os bancos</option>
                         {bankOptions.map((b) => <option key={b} value={b}>{b}</option>)}
                     </select>
+                    <select value={userFilter} onChange={(e) => setUserFilter(e.target.value)}>
+                        <option value="">Todos os usuarios</option>
+                        {members.map((m) => <option key={m.id} value={m.id}>{m.username}</option>)}
+                    </select>
                     <input type="text" placeholder="Buscar por descricao..." value={search} onChange={(e) => setSearch(e.target.value)} />
                     <button type="button" className="btn-link" disabled={recategorizing} onClick={recategorize}>
                         {recategorizing ? 'Recategorizando...' : 'Recategorizar sem categoria a partir do historico'}
@@ -242,7 +268,7 @@ export default function Transactions() {
                 <div className="table-scroll">
                 <table className="data-table">
                     <thead>
-                        <tr><th>Data</th><th>Descricao</th><th>Categoria</th><th>Banco</th><th>Valor</th><th /></tr>
+                        <tr><th>Data</th><th>Descricao</th><th>Categoria</th><th>Banco</th><th>Usuario</th><th>Valor</th><th /></tr>
                     </thead>
                     <tbody>
                         {(() => {
@@ -255,7 +281,7 @@ export default function Transactions() {
                                     <Fragment key={t.id}>
                                         {isNewMonth && (
                                             <tr className="month-divider-row">
-                                                <td colSpan={6}>{monthLabel(t.date)}</td>
+                                                <td colSpan={7}>{monthLabel(t.date)}</td>
                                             </tr>
                                         )}
                                         <tr>
@@ -263,6 +289,7 @@ export default function Transactions() {
                                             <td>{t.description}</td>
                                             <td>{categoryName(t.category_id)}</td>
                                             <td>{bankNameForTxn(t, accountsById, cardsById)}</td>
+                                            <td>{memberName(t.created_by)}</td>
                                             <td className={t.amount < 0 ? 'text-negative' : 'text-positive'}>{formatCurrency(t.amount, hideValues)}</td>
                                             <td className="row-actions">
                                                 <button className="btn-icon" title="Editar lancamento" aria-label="Editar lancamento" onClick={() => openEdit(t)}>
@@ -295,6 +322,11 @@ export default function Transactions() {
                                 onChange={(e) => setEditForm({ ...editForm, category_id: e.target.value })}>
                                 <option value="">Sem categoria</option>
                                 {categories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+                            </select>
+                            <select value={editForm.created_by}
+                                onChange={(e) => setEditForm({ ...editForm, created_by: e.target.value })}>
+                                <option value="">Quem gastou?</option>
+                                {members.map((m) => <option key={m.id} value={m.id}>{m.username}</option>)}
                             </select>
                             <select value={editForm.destination_type}
                                 onChange={(e) => setEditForm({ ...editForm, destination_type: e.target.value, destination_id: '' })}>

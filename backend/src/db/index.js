@@ -88,6 +88,7 @@ const migrateColumns = () => {
         installment_group: 'TEXT',
         installment_number: 'INTEGER',
         installment_total: 'INTEGER',
+        created_by: 'INTEGER REFERENCES users(id)',
     };
     for (const [name, type] of Object.entries(columns)) {
         if (!existing.has(name)) db.exec(`ALTER TABLE transactions ADD COLUMN ${name} ${type}`);

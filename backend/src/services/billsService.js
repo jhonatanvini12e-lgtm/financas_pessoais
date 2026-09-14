@@ -113,19 +113,24 @@ export function getCardInvoicesStatus(userId, referenceDate = new Date()) {
 // bills para ela aparecer em Contas a Pagar com o vencimento certo, sem
 // precisar de nenhuma acao manual do usuario. Idempotente: reimportar mais
 // lancamentos da mesma fatura atualiza o valor em vez de duplicar a linha.
-export function registerCardInvoiceFromImport(userId, cardId, referenceDate = new Date()) {
+// `overrideTotal`, quando informado (valor lido direto da fatura pelo
+// usuario/parser), substitui a soma dos lancamentos do periodo como valor do
+// lancamento -- mais confiavel que somar transacoes por data, que fica errado
+// se algum lancamento nao foi importado ou tem a data errada.
+export function registerCardInvoiceFromImport(userId, cardId, referenceDate = new Date(), overrideTotal = null) {
     const card = db.prepare('SELECT * FROM credit_cards WHERE id = ? AND user_id = ?').get(cardId, userId);
     if (!card) return null;
 
     const invoice = getCardInvoice(card, referenceDate);
-    if (invoice.total <= 0) return null;
+    const total = overrideTotal != null ? overrideTotal : invoice.total;
+    if (total <= 0) return null;
 
     const existing = db
         .prepare('SELECT * FROM bills WHERE user_id = ? AND card_id = ? AND due_date = ?')
         .get(userId, cardId, invoice.dueDate);
 
     if (existing) {
-        db.prepare('UPDATE bills SET expected_amount = ?, active = 1 WHERE id = ?').run(invoice.total, existing.id);
+        db.prepare('UPDATE bills SET expected_amount = ?, active = 1 WHERE id = ?').run(total, existing.id);
         return existing.id;
     }
 
@@ -134,7 +139,7 @@ export function registerCardInvoiceFromImport(userId, cardId, referenceDate = ne
             `INSERT INTO bills (user_id, name, expected_amount, recurring, due_date, card_id)
              VALUES (?, ?, ?, 0, ?, ?)`
         )
-        .run(userId, `Fatura ${card.card_name}`, invoice.total, invoice.dueDate, cardId);
+        .run(userId, `Fatura ${card.card_name}`, total, invoice.dueDate, cardId);
     return info.lastInsertRowid;
 }
 

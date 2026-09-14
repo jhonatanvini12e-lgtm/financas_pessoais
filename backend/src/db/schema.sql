@@ -95,10 +95,12 @@ CREATE TABLE IF NOT EXISTS transactions (
     installment_number INTEGER,
     installment_total INTEGER,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    created_by INTEGER,
     FOREIGN KEY(user_id) REFERENCES users(id),
     FOREIGN KEY(account_id) REFERENCES accounts(id),
     FOREIGN KEY(card_id) REFERENCES credit_cards(id),
-    FOREIGN KEY(category_id) REFERENCES categories(id)
+    FOREIGN KEY(category_id) REFERENCES categories(id),
+    FOREIGN KEY(created_by) REFERENCES users(id)
 );
 
 -- Auditoria de alteracoes/remocoes em transactions (valores antes/depois em
@@ -170,6 +172,13 @@ CREATE TABLE IF NOT EXISTS bills (
     FOREIGN KEY(card_id) REFERENCES credit_cards(id),
     FOREIGN KEY(category_id) REFERENCES categories(id)
 );
+
+-- Reforca a nivel de banco o "uma por (card_id, due_date)" comentado acima --
+-- registerCardInvoiceFromImport ja faz esse dedup na aplicacao, mas isso e'
+-- so' um SELECT-then-INSERT (nao atomico) sem nenhuma garantia no schema; o
+-- indice parcial (so' cobre linhas de fatura, card_id IS NOT NULL) evita que
+-- qualquer bug futuro nesse fluxo duplique silenciosamente a mesma fatura.
+CREATE UNIQUE INDEX IF NOT EXISTS idx_bills_card_due_date ON bills(card_id, due_date) WHERE card_id IS NOT NULL;
 
 -- Uma linha por mes (period = 'YYYY-MM') em que a conta foi marcada como paga.
 -- Ausencia de linha para o mes corrente = pendente ou atrasada (calculado em

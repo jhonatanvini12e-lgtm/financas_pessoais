@@ -126,6 +126,16 @@ router.get('/me', authMiddleware, (req, res) => {
     res.json(user);
 });
 
+// Lista os usuarios que compartilham os mesmos dados financeiros (o dono do
+// household e quem tiver household_id apontando pra ele) -- usado para
+// marcar em cada lancamento qual pessoa realizou o gasto.
+router.get('/household-members', authMiddleware, (req, res) => {
+    const members = db
+        .prepare('SELECT id, username FROM users WHERE id = ? OR household_id = ? ORDER BY username')
+        .all(req.user.householdId, req.user.householdId);
+    res.json(members);
+});
+
 router.post('/activity-ping', authMiddleware, (req, res) => {
     res.json({ ok: true });
 });

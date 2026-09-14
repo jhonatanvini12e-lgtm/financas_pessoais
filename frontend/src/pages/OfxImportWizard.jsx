@@ -7,12 +7,15 @@ export default function OfxImportWizard() {
     const [step, setStep] = useState(1);
     const [destinationType, setDestinationType] = useState('account');
     const [destinationId, setDestinationId] = useState('');
+    const [createdBy, setCreatedBy] = useState('');
     const [accounts, setAccounts] = useState([]);
     const [cards, setCards] = useState([]);
     const [categories, setCategories] = useState([]);
+    const [members, setMembers] = useState([]);
     const [file, setFile] = useState(null);
     const [previewFilename, setPreviewFilename] = useState('');
     const [previewWarnings, setPreviewWarnings] = useState([]);
+    const [invoiceTotal, setInvoiceTotal] = useState('');
     const [rows, setRows] = useState([]);
     const [result, setResult] = useState(null);
     const [error, setError] = useState('');
@@ -24,6 +27,7 @@ export default function OfxImportWizard() {
         api.get('/accounts').then(setAccounts).catch(() => {});
         api.get('/cards').then(setCards).catch(() => {});
         api.get('/categories').then(setCategories).catch(() => {});
+        api.get('/auth/household-members').then(setMembers).catch(() => {});
     }, []);
 
     const options = destinationType === 'account' ? accounts : cards;
@@ -41,6 +45,7 @@ export default function OfxImportWizard() {
             setNeedsPdfPassword(false);
             setPreviewFilename(data.filename);
             setPreviewWarnings(data.warnings || []);
+            setInvoiceTotal(data.invoiceTotal != null ? String(data.invoiceTotal) : '');
             setRows(
                 data.transactions.map((t) => ({
                     ...t,
@@ -76,6 +81,7 @@ export default function OfxImportWizard() {
         try {
             const payload = {
                 filename: previewFilename,
+                created_by: createdBy,
                 transactions: includedRows.map((r) => ({
                     fitid: r.fitid,
                     date: r.date,
@@ -87,7 +93,16 @@ export default function OfxImportWizard() {
                 })),
             };
             if (destinationType === 'account') payload.account_id = destinationId;
-            else payload.card_id = destinationId;
+            else {
+                payload.card_id = destinationId;
+                // Valor impresso na propria fatura (detectado no PDF ou digitado
+                // aqui pelo usuario): usado como o valor exato do lancamento em
+                // Contas a Pagar em vez de somar os lancamentos importados por
+                // periodo, que fica errado se algum lancamento nao veio no
+                // extrato ou tem a data errada. Deixar em branco cai no calculo
+                // automatico por soma (comportamento antigo).
+                if (invoiceTotal) payload.invoice_total = Number(invoiceTotal);
+            }
 
             const data = await api.post('/transactions/import-statement/commit', payload);
             setResult(data);
@@ -104,8 +119,10 @@ export default function OfxImportWizard() {
         setFile(null);
         setRows([]);
         setPreviewWarnings([]);
+        setInvoiceTotal('');
         setResult(null);
         setError('');
+        setCreatedBy('');
     };
 
     return (
@@ -137,13 +154,23 @@ export default function OfxImportWizard() {
                             </select>
                         </div>
 
+                        <h2>Quem realizou esses gastos?</h2>
+                        <div className="input-group">
+                            <select value={createdBy} onChange={(e) => setCreatedBy(e.target.value)}>
+                                <option value="">Selecione o usuario...</option>
+                                {members.map((m) => (
+                                    <option key={m.id} value={m.id}>{m.username}</option>
+                                ))}
+                            </select>
+                        </div>
+
                         {options.length === 0 ? (
                             <p className="budget-alert-warning">
                                 Voce ainda nao cadastrou {destinationType === 'account' ? 'nenhuma conta bancaria' : 'nenhum cartao de credito'}.{' '}
                                 <Link to="/accounts">Cadastre em Contas e Cartoes</Link> antes de importar um extrato.
                             </p>
                         ) : (
-                            <button className="btn-primary" disabled={!destinationId} onClick={() => setStep(2)}>Proximo</button>
+                            <button className="btn-primary" disabled={!destinationId || !createdBy} onClick={() => setStep(2)}>Proximo</button>
                         )}
                     </>
                 )}
@@ -174,6 +201,25 @@ export default function OfxImportWizard() {
                         {previewWarnings.length > 0 && (
                             <div className="budget-alert-warning">
                                 {previewWarnings.map((w, i) => <p key={i}>{w}</p>)}
+                            </div>
+                        )}
+
+                        {destinationType === 'card' && (
+                            <div className="input-group">
+                                <label>
+                                    Valor total da fatura (o que esta escrito como "total a pagar" na fatura)
+                                    <input
+                                        type="number"
+                                        step="0.01"
+                                        min="0"
+                                        placeholder="Ex: 1228.23"
+                                        value={invoiceTotal}
+                                        onChange={(e) => setInvoiceTotal(e.target.value)}
+                                    />
+                                </label>
+                                <p className="muted">
+                                    Esse valor (nao a soma dos lancamentos abaixo) sera lancado em Contas a Pagar. Deixe em branco para o sistema calcular automaticamente somando os lancamentos do periodo.
+                                </p>
                             </div>
                         )}
 
