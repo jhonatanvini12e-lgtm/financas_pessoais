@@ -121,8 +121,8 @@ router.post('/links', async (req, res) => {
         }
 
         const info = db
-            .prepare('INSERT INTO pluggy_card_links (user_id, card_id, pluggy_account_id, created_by, sync_from) VALUES (?, ?, ?, ?, ?)')
-            .run(req.user.householdId, cardId, pluggy_account_id, created_by, syncFrom);
+            .prepare('INSERT INTO pluggy_card_links (user_id, card_id, pluggy_account_id, pluggy_item_id, created_by, sync_from) VALUES (?, ?, ?, ?, ?, ?)')
+            .run(req.user.householdId, cardId, pluggy_account_id, remote.itemId, created_by, syncFrom);
 
         let syncError = null;
         try {

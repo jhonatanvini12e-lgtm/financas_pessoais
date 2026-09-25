@@ -211,11 +211,15 @@ CREATE TABLE IF NOT EXISTS card_invoice_payments (
 -- so mexe em lancamentos com data >= sync_from -- o que veio antes disso
 -- (ex: faturas ja importadas por arquivo) fica intocado. created_by e quem
 -- aparece como "quem realizou o gasto" nos lancamentos sincronizados.
+-- pluggy_item_id identifica de qual conexao (item) da Pluggy a conta veio --
+-- necessario pra saber qual client_id/secret usar quando ha mais de uma
+-- conta Meu Pluggy configurada (uma por CPF/titular, ver pluggyClient.js).
 CREATE TABLE IF NOT EXISTS pluggy_card_links (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     user_id INTEGER NOT NULL,
     card_id INTEGER NOT NULL UNIQUE,
     pluggy_account_id TEXT NOT NULL UNIQUE,
+    pluggy_item_id TEXT,
     created_by INTEGER NOT NULL,
     sync_from TEXT NOT NULL,
     last_sync_at DATETIME,

@@ -104,6 +104,14 @@ const migrateColumns = () => {
     for (const [name, type] of Object.entries(billColumns)) {
         if (!existingBillColumns.has(name)) db.exec(`ALTER TABLE bills ADD COLUMN ${name} ${type}`);
     }
+
+    // Vinculos criados antes do suporte a varias contas Meu Pluggy nao tem
+    // pluggy_item_id -- pluggySyncService descobre e preenche isso sozinho na
+    // proxima sync de cada um (ver resolveItemIdForAccount).
+    const existingLinkColumns = new Set(db.prepare('PRAGMA table_info(pluggy_card_links)').all().map((c) => c.name));
+    if (!existingLinkColumns.has('pluggy_item_id')) {
+        db.exec('ALTER TABLE pluggy_card_links ADD COLUMN pluggy_item_id TEXT');
+    }
 };
 
 // Recurso de Open Finance removido (pessoa fisica nao consegue se

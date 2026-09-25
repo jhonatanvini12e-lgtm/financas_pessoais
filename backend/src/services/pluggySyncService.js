@@ -445,10 +445,11 @@ export async function listRemoteCreditCards(userId) {
     for (const itemId of getItemIds()) {
         const accounts = await listAccounts(itemId);
         for (const account of accounts.filter((a) => a.type === 'CREDIT')) {
-            const bills = await listBills(account.id);
+            const bills = await listBills(account.id, itemId);
             const suggestion = suggestCycleDays(bills);
             result.push({
                 id: account.id,
+                itemId,
                 name: account.name.trim(),
                 number: account.number,
                 balance: account.balance,
@@ -518,6 +519,18 @@ function recordRun(link, { trigger, status, startedAt, remoteCount = null, summa
     ).run(link.id, link.id, RUNS_KEPT_PER_LINK);
 }
 
+// Vinculos criados antes do suporte a varias contas Meu Pluggy nao sabem seu
+// itemId (ver migracao em db/index.js) -- descobre uma vez, testando contra
+// os itens de cada titular configurado, e grava para nao repetir isso a cada
+// sync.
+async function resolveItemIdForAccount(accountId) {
+    for (const itemId of getItemIds()) {
+        const accounts = await listAccounts(itemId);
+        if (accounts.some((a) => a.id === accountId)) return itemId;
+    }
+    throw new Error(`Conta ${accountId} nao encontrada em nenhuma credencial Pluggy configurada`);
+}
+
 const runningLinks = new Set();
 
 // `trigger`: CRON (agendada), MANUAL (botao "sincronizar agora") ou LINK
@@ -538,10 +551,16 @@ export async function syncCardLink(linkId, { trigger = 'MANUAL' } = {}) {
         const card = db.prepare('SELECT * FROM credit_cards WHERE id = ? AND user_id = ?').get(link.card_id, link.user_id);
         if (!card) throw new Error('Cartao vinculado nao encontrado');
 
+        let itemId = link.pluggy_item_id;
+        if (!itemId) {
+            itemId = await resolveItemIdForAccount(link.pluggy_account_id);
+            db.prepare('UPDATE pluggy_card_links SET pluggy_item_id = ? WHERE id = ?').run(itemId, link.id);
+        }
+
         const [account, remoteTxns, bills] = await Promise.all([
-            getAccount(link.pluggy_account_id),
-            listTransactions(link.pluggy_account_id),
-            listBills(link.pluggy_account_id),
+            getAccount(link.pluggy_account_id, itemId),
+            listTransactions(link.pluggy_account_id, itemId),
+            listBills(link.pluggy_account_id, itemId),
         ]);
         remoteCount = remoteTxns.length;
 
