@@ -4,13 +4,20 @@ import StatCard from '../components/StatCard.jsx';
 import BarChartCard from '../components/charts/BarChartCard.jsx';
 import LineChartCard from '../components/charts/LineChartCard.jsx';
 import { usePrivacy } from '../context/PrivacyContext.jsx';
-import { formatCurrency } from '../utils/currency.js';
 
 const MONTHS_OPTIONS = [
     { value: 3, label: 'Ultimos 3 meses' },
     { value: 6, label: 'Ultimos 6 meses' },
     { value: 12, label: 'Ultimos 12 meses' },
 ];
+
+// Valores em R$ nos graficos sao arredondados para inteiro (sem centavos) --
+// a precisao de centavos so importa nas telas de lancamento/fatura, aqui so
+// atrapalha a leitura do eixo/tooltip. A unidade fica explicita no nome de
+// cada serie (aparece na legenda), nao so no tooltip.
+const formatChartCurrency = (value) => `R$ ${Math.round(Number(value) || 0).toLocaleString('pt-BR')}`;
+const formatChartCount = (value) => Math.round(Number(value) || 0).toLocaleString('pt-BR');
+const formatStatCurrency = (value, hide) => (hide ? '••••••' : formatChartCurrency(value));
 
 function CardUserFilter({ cards, members, cardId, onCardChange, userId, onUserChange }) {
     return (
@@ -109,7 +116,8 @@ export default function Analytics() {
                     <BarChartCard
                         data={spending.monthly}
                         xKey="month"
-                        bars={[{ key: 'total', name: 'Gasto total', color: '#f87171' }]}
+                        bars={[{ key: 'total', name: 'Gasto total (R$)', color: '#f87171' }]}
+                        valueFormatter={formatChartCurrency}
                     />
                 )}
             </section>
@@ -132,15 +140,17 @@ export default function Analytics() {
                             data={cashFlow.monthly}
                             xKey="month"
                             bars={[
-                                { key: 'income', name: 'Entradas', color: '#34d399' },
-                                { key: 'expense', name: 'Saidas', color: '#f87171' },
+                                { key: 'income', name: 'Entradas (R$)', color: '#34d399' },
+                                { key: 'expense', name: 'Saidas (R$)', color: '#f87171' },
                             ]}
+                            valueFormatter={formatChartCurrency}
                         />
                         <LineChartCard
                             title="Saldo acumulado"
                             data={cashFlow.monthly}
                             xKey="month"
-                            lines={[{ key: 'cumulative', name: 'Saldo acumulado', color: '#3b82f6' }]}
+                            lines={[{ key: 'cumulative', name: 'Saldo acumulado (R$)', color: '#3b82f6' }]}
+                            valueFormatter={formatChartCurrency}
                         />
                     </div>
                 )}
@@ -167,16 +177,17 @@ export default function Analytics() {
                                 label="Uso de credito"
                                 value={`${(usage.usageRatio * 100).toFixed(0)}%`}
                                 tone={usage.usageRatio >= 0.7 ? 'critical' : 'default'}
-                                hint={`${formatCurrency(usage.totalUsed, hideValues)} de ${formatCurrency(usage.totalLimit, hideValues)}`}
+                                hint={`${formatStatCurrency(usage.totalUsed, hideValues)} de ${formatStatCurrency(usage.totalLimit, hideValues)}`}
                             />
                         </div>
                         <BarChartCard
                             data={usage.byCard}
                             xKey="cardName"
                             bars={[
-                                { key: 'limit', name: 'Limite', color: '#3b82f6' },
-                                { key: 'used', name: 'Usado', color: '#fbbf24' },
+                                { key: 'limit', name: 'Limite (R$)', color: '#3b82f6' },
+                                { key: 'used', name: 'Usado (R$)', color: '#fbbf24' },
                             ]}
+                            valueFormatter={formatChartCurrency}
                         />
                     </>
                 )}
@@ -198,13 +209,14 @@ export default function Analytics() {
                     <>
                         <div className="stat-grid">
                             <StatCard label="Total de parcelamentos" value={installments.total} />
-                            <StatCard label="Valor total parcelado" value={formatCurrency(installments.totalValue, hideValues)} />
+                            <StatCard label="Valor total parcelado" value={formatStatCurrency(installments.totalValue, hideValues)} />
                         </div>
                         {installments.byCard.length > 0 && (
                             <BarChartCard
                                 data={installments.byCard}
                                 xKey="cardName"
-                                bars={[{ key: 'count', name: 'Parcelamentos', color: '#3b82f6' }]}
+                                bars={[{ key: 'count', name: 'Parcelamentos (qtd)', color: '#3b82f6' }]}
+                                valueFormatter={formatChartCount}
                             />
                         )}
                     </>

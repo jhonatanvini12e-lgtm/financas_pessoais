@@ -1,7 +1,7 @@
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import { useTheme } from '../../context/ThemeContext.jsx';
 
-export default function BarChartCard({ title, data, xKey, bars, height = 280 }) {
+export default function BarChartCard({ title, data, xKey, bars, height = 280, valueFormatter }) {
     const { theme } = useTheme();
     const isLight = theme === 'light';
     const gridColor = isLight ? 'rgba(15,23,42,0.10)' : 'rgba(255,255,255,0.08)';
@@ -16,8 +16,11 @@ export default function BarChartCard({ title, data, xKey, bars, height = 280 }) 
                 <BarChart data={data}>
                     <CartesianGrid strokeDasharray="3 3" stroke={gridColor} />
                     <XAxis dataKey={xKey} stroke={axisColor} fontSize={12} />
-                    <YAxis stroke={axisColor} fontSize={12} />
-                    <Tooltip contentStyle={{ background: tooltipBg, border: tooltipBorder, borderRadius: 10 }} />
+                    <YAxis stroke={axisColor} fontSize={12} tickFormatter={valueFormatter} />
+                    <Tooltip
+                        contentStyle={{ background: tooltipBg, border: tooltipBorder, borderRadius: 10 }}
+                        formatter={valueFormatter ? (value, name) => [valueFormatter(value), name] : undefined}
+                    />
                     <Legend />
                     {bars.map((bar) => (
                         <Bar key={bar.key} dataKey={bar.key} name={bar.name || bar.key} fill={bar.color} radius={[4, 4, 0, 0]} />
