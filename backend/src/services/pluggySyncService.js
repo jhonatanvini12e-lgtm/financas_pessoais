@@ -18,6 +18,49 @@ import { raiseAlert, alreadyAlertedToday } from './notificationEngine.js';
 // primeira tentativa de casar um lancamento -- ver reconcileTransactions.
 
 const SOURCE = 'PLUGGY';
+
+// Ultimo recurso de categorizacao (depois do historico e das palavras-chave
+// do usuario, ver categorizeRow): traduz a categoria que a Pluggy atribui a
+// cada lancamento para o nome de uma categoria do app. Se o usuario nao tiver
+// uma categoria com esse nome (comparado sem acento/maiusculas), o
+// lancamento fica sem categoria. Categorias genericas demais da Pluggy
+// ("Shopping", "Services", "Transfers") ficam de fora de proposito -- melhor
+// sem categoria do que numa errada.
+const PLUGGY_CATEGORY_TO_APP = {
+    'Eating out': 'Alimentacao',
+    'Food delivery': 'Alimentacao',
+    'Food and drinks': 'Alimentacao',
+    Groceries: 'Alimentacao',
+    'Taxi and ride-hailing': 'Transporte',
+    'Gas stations': 'Transporte',
+    Parking: 'Transporte',
+    'Public transportation': 'Transporte',
+    'Car rental': 'Transporte',
+    Tolls: 'Transporte',
+    Pharmacy: 'Saude',
+    Healthcare: 'Saude',
+    Optometry: 'Saude',
+    'Gyms and fitness centers': 'Saude',
+    'Wellness and fitness': 'Saude',
+    'Vehicle maintenance': 'Manutencao',
+    Automotive: 'Manutencao',
+    'Online shopping': 'Compras Internet',
+    Telecommunications: 'Assinaturas',
+    'Digital services': 'Assinaturas',
+    Insurance: 'Assinaturas',
+    'Video streaming': 'Lazer',
+    'Music streaming': 'Lazer',
+    'Cinema, theater and concerts': 'Lazer',
+    Leisure: 'Lazer',
+    Tickets: 'Lazer',
+    Accomodation: 'Lazer',
+    School: 'Educacao',
+    Bookstore: 'Educacao',
+    Housing: 'Moradia',
+    'Late payment and overdraft costs': 'Gastos Imprevistos',
+};
+
+const normalizeName = (name) => String(name ?? '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
 const FITID_PREFIX = 'PLUGGY-';
 
 // Pluggy manda datas de transacao em UTC; um lancamento a meia-noite no
@@ -62,9 +105,71 @@ function isCardPayment(txn) {
 // - parcelas que o banco ainda nao mandou sao projetadas mes a mes ate a
 //   ultima (mesma ideia da importacao por arquivo), com external_fitid NULL.
 //   Quando a parcela real chega, ela casa com a projetada pelo numero.
-function buildDesiredRows(accountId, remoteTxns) {
+// O app separa faturas so' pela data (closing_day = ultimo dia incluido, ver
+// cardService.getCurrentInvoicePeriod), mas o banco decide a fatura de cada
+// lancamento por regras proprias: o dia de fechamento anda (fim de semana,
+// Inter fecha dia 4 ou 5), e no Mercado Pago parcelas lancadas NO dia do
+// fechamento ficam na fatura que fecha, enquanto compras a vista no mesmo dia
+// vao para a seguinte. Para o total de cada fatura no app bater com o banco:
+// - lancados (com billId): se a data cai fora do ciclo do app correspondente
+//   a fatura informada pela Pluggy, e' movida para a borda desse ciclo (so'
+//   acontece com lancamentos no limite do ciclo, a diferenca e' de 1-2 dias);
+// - parcelas futuras (sem billId ainda): se o historico do cartao mostra que
+//   parcelas no dia do fechamento ficam na fatura que fecha, as que caem no
+//   dia de fechamento habitual vao para a vespera.
+function dateWithClampedDay(year, month, day) {
+    const lastDay = new Date(Date.UTC(year, month, 0)).getUTCDate();
+    return `${year}-${String(month).padStart(2, '0')}-${String(Math.min(day, lastDay)).padStart(2, '0')}`;
+}
+
+function buildBillCycleAdjuster(remoteTxns, bills, closingDay) {
+    // Ciclo do app que corresponde a cada fatura do banco: termina no
+    // closing_day do mes em que o banco fechou a fatura.
+    const cycleByBill = new Map();
+    for (const b of bills) {
+        if (!b.billClosingDate) continue;
+        const [y, m] = b.billClosingDate.slice(0, 7).split('-').map(Number);
+        const [py, pm] = m === 1 ? [y - 1, 12] : [y, m - 1];
+        cycleByBill.set(b.id, {
+            start: addDays(dateWithClampedDay(py, pm, closingDay), 1),
+            end: dateWithClampedDay(y, m, closingDay),
+            closing: b.billClosingDate.slice(0, 10),
+        });
+    }
+    const closingDates = new Set([...cycleByBill.values()].map((c) => c.closing));
+
+    let installmentsInClosingBill = 0;
+    let installmentsInNextBill = 0;
+    for (const txn of remoteTxns) {
+        const meta = txn.creditCardMetadata || {};
+        const date = toLocalDate(txn.date);
+        if (!(meta.installmentNumber > 1) || !closingDates.has(date) || !cycleByBill.has(meta.billId)) continue;
+        if (cycleByBill.get(meta.billId).closing === date) installmentsInClosingBill += 1;
+        else installmentsInNextBill += 1;
+    }
+    const shiftFutureInstallments = installmentsInClosingBill > installmentsInNextBill;
+
+    const dayCounts = new Map();
+    for (const d of closingDates) dayCounts.set(d.slice(8, 10), (dayCounts.get(d.slice(8, 10)) || 0) + 1);
+    const usualClosingDay = [...dayCounts.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] ?? null;
+
+    return (txn, date) => {
+        const meta = txn.creditCardMetadata || {};
+        const cycle = cycleByBill.get(meta.billId);
+        if (cycle) {
+            if (date > cycle.end) return cycle.end;
+            if (date < cycle.start) return cycle.start;
+            return date;
+        }
+        if (shiftFutureInstallments && meta.installmentNumber > 1 && date.slice(8, 10) === usualClosingDay) return addDays(date, -1);
+        return date;
+    };
+}
+
+function buildDesiredRows(accountId, remoteTxns, bills, closingDay) {
     const rows = [];
     const groups = new Map();
+    const adjustToBillCycle = buildBillCycleAdjuster(remoteTxns, bills, closingDay);
     // Parcelas que vieram sem purchaseDate (acontece com parcelas futuras)
     // nao da para agrupar pela data da compra -- entram depois no grupo do
     // mesmo estabelecimento/no de parcelas que ainda nao tem esse numero.
@@ -76,14 +181,16 @@ function buildDesiredRows(accountId, remoteTxns) {
         const row = {
             fitid: FITID_PREFIX + txn.id,
             amount: round2(-txn.amount),
-            date: toLocalDate(txn.date),
+            date: adjustToBillCycle(txn, toLocalDate(txn.date)),
             status: txn.status === 'POSTED' ? 'CLEARED' : 'PENDING',
             description: baseDescription,
+            pluggyCategory: txn.category || null,
         };
 
         if (meta.totalInstallments > 1 && meta.installmentNumber >= 1) {
             row.installmentNumber = meta.installmentNumber;
             row.installmentTotal = meta.totalInstallments;
+            row.billId = meta.billId || null;
             if (!meta.purchaseDate) {
                 withoutPurchaseDate.push(row);
                 continue;
@@ -119,8 +226,16 @@ function buildDesiredRows(accountId, remoteTxns) {
         const installmentGroup = FITID_PREFIX + crypto.createHash('sha1').update(`${accountId}|${key}`).digest('hex').slice(0, 20);
         installments.sort((a, b) => a.installmentNumber - b.installmentNumber);
 
+        // Parcela ja lancada numa fatura (billId) tem a data do banco como
+        // verdade -- inclusive varias parcelas no mesmo dia, quando a compra
+        // e' cancelada e o banco antecipa todas para a fatura do estorno. So'
+        // as ainda sem fatura sao corrigidas.
         let previous = null;
         for (const row of installments) {
+            if (row.billId) {
+                previous = row;
+                continue;
+            }
             if (previous && row.date <= previous.date) {
                 row.date = addMonths(previous.date, Math.max(row.installmentNumber - previous.installmentNumber, 1));
             } else if (!previous && row.installmentNumber > 1 && row.date <= row.purchaseDate) {
@@ -145,6 +260,7 @@ function buildDesiredRows(accountId, remoteTxns) {
                 installmentNumber: num,
                 installmentTotal: last.installmentTotal,
                 installmentGroup,
+                pluggyCategory: last.pluggyCategory,
             });
         }
     }
@@ -199,6 +315,13 @@ function reconcileTransactions(link, desired) {
 
     const learningMap = buildCategoryLearningMap(link.user_id);
     const categoriesWithKeywords = buildCategoryKeywordList(link.user_id);
+    const categoryIdByName = new Map(
+        db.prepare('SELECT id, name FROM categories WHERE user_id = ?').all(link.user_id).map((c) => [normalizeName(c.name), c.id])
+    );
+    const categorizeRow = (d) =>
+        categorize(link.user_id, d.description, learningMap, categoriesWithKeywords) ??
+        categoryIdByName.get(normalizeName(PLUGGY_CATEGORY_TO_APP[d.pluggyCategory])) ??
+        null;
     const insert = db.prepare(
         `INSERT INTO transactions (user_id, card_id, category_id, amount, date, description, status, external_fitid, source, installment_group, installment_number, installment_total, created_by)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
@@ -220,8 +343,7 @@ function reconcileTransactions(link, desired) {
         const values = [d.amount, d.date, d.status, d.fitid, SOURCE, d.installmentGroup ?? null, d.installmentNumber ?? null, d.installmentTotal ?? null];
 
         if (!l) {
-            const categoryId = categorize(link.user_id, d.description, learningMap, categoriesWithKeywords);
-            insert.run(link.user_id, link.card_id, categoryId || null, d.amount, d.date, d.description, d.status, d.fitid, SOURCE,
+            insert.run(link.user_id, link.card_id, categorizeRow(d), d.amount, d.date, d.description, d.status, d.fitid, SOURCE,
                 d.installmentGroup ?? null, d.installmentNumber ?? null, d.installmentTotal ?? null, link.created_by);
             inserted += 1;
             return;
@@ -424,7 +546,7 @@ export async function syncCardLink(linkId, { trigger = 'MANUAL' } = {}) {
         remoteCount = remoteTxns.length;
 
         const payments = remoteTxns.filter(isCardPayment);
-        const desired = buildDesiredRows(link.pluggy_account_id, remoteTxns.filter((t) => !isCardPayment(t)))
+        const desired = buildDesiredRows(link.pluggy_account_id, remoteTxns.filter((t) => !isCardPayment(t)), bills, card.closing_day)
             .filter((d) => d.date >= link.sync_from);
 
         const result = db.transaction(() => {
