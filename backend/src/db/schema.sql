@@ -227,6 +227,28 @@ CREATE TABLE IF NOT EXISTS pluggy_card_links (
     FOREIGN KEY(created_by) REFERENCES users(id)
 );
 
+-- Historico de execucoes da sync da Pluggy (uma linha por cartao por
+-- execucao), para a tela de monitoramento de conexoes. Mantemos so as
+-- ultimas execucoes de cada vinculo (ver pluggySyncService.recordRun).
+CREATE TABLE IF NOT EXISTS pluggy_sync_runs (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    link_id INTEGER NOT NULL,
+    user_id INTEGER NOT NULL,
+    trigger TEXT CHECK(trigger IN ('CRON', 'MANUAL', 'LINK')) NOT NULL,
+    status TEXT CHECK(status IN ('OK', 'ERROR')) NOT NULL,
+    started_at DATETIME NOT NULL,
+    duration_ms INTEGER,
+    remote_count INTEGER,
+    inserted INTEGER DEFAULT 0,
+    updated INTEGER DEFAULT 0,
+    deleted INTEGER DEFAULT 0,
+    bills_registered INTEGER DEFAULT 0,
+    message TEXT,
+    FOREIGN KEY(link_id) REFERENCES pluggy_card_links(id) ON DELETE CASCADE,
+    FOREIGN KEY(user_id) REFERENCES users(id)
+);
+CREATE INDEX IF NOT EXISTS idx_pluggy_sync_runs_link ON pluggy_sync_runs(link_id, started_at);
+
 CREATE TABLE IF NOT EXISTS debts (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     user_id INTEGER NOT NULL,

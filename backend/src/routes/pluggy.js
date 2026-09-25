@@ -1,7 +1,7 @@
 import express from 'express';
 import db from '../db/index.js';
 import { isPluggyConfigured } from '../services/pluggyClient.js';
-import { listRemoteCreditCards, suggestSyncFrom, syncCardLink } from '../services/pluggySyncService.js';
+import { listRemoteCreditCards, suggestSyncFrom, syncCardLink, getConnectionsStatus } from '../services/pluggySyncService.js';
 
 const router = express.Router();
 
@@ -66,6 +66,15 @@ router.get('/accounts', async (req, res) => {
     });
 });
 
+// Tela de monitoramento: saude das conexoes com o banco (itens da Pluggy),
+// dos cartoes vinculados e historico de execucoes. `?refresh=1` ignora o
+// cache curto do status dos itens.
+router.get('/status', async (req, res) => {
+    if (!isPluggyConfigured()) return res.json({ configured: false });
+    const status = await getConnectionsStatus(req.user.householdId, { refresh: req.query.refresh === '1' });
+    res.json({ configured: true, ...status });
+});
+
 // Vincula uma conta de cartao da Pluggy a um cartao existente (card_id) ou
 // cria um novo (new_card) e ja roda a primeira sync.
 router.post('/links', async (req, res) => {
@@ -117,7 +126,7 @@ router.post('/links', async (req, res) => {
 
         let syncError = null;
         try {
-            await syncCardLink(info.lastInsertRowid);
+            await syncCardLink(info.lastInsertRowid, { trigger: 'LINK' });
         } catch (err) {
             syncError = err.message;
         }
@@ -131,7 +140,7 @@ router.post('/links/:id/sync', async (req, res) => {
     if (!link) return res.status(404).json({ error: 'Vinculo nao encontrado' });
 
     return withPluggyErrors(res, async () => {
-        const result = await syncCardLink(link.id);
+        const result = await syncCardLink(link.id, { trigger: 'MANUAL' });
         if (result.skipped) return res.status(409).json({ error: 'Sincronizacao deste cartao ja esta em andamento' });
         res.json({ link: linkWithCard(db.prepare('SELECT * FROM pluggy_card_links WHERE id = ?').get(link.id)), result });
     });

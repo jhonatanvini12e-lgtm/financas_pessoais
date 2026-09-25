@@ -1,10 +1,11 @@
 import crypto from 'node:crypto';
 import db from '../db/index.js';
-import { getItemIds, listAccounts, getAccount, listTransactions, listBills } from './pluggyClient.js';
+import { getItemIds, getItem, listAccounts, getAccount, listTransactions, listBills } from './pluggyClient.js';
 import { categorize, buildCategoryLearningMap, buildCategoryKeywordList, normalizeForMatch } from './categorizationEngine.js';
 import { addMonths } from './statementImport/columnMapper.js';
 import { upsertCardBill } from './billsService.js';
 import { checkBudgetAlerts } from './budgetEngine.js';
+import { raiseAlert, alreadyAlertedToday } from './notificationEngine.js';
 
 // Sync de cartoes de credito via Pluggy (Open Finance pelo Meu Pluggy).
 //
@@ -356,18 +357,61 @@ export function suggestSyncFrom(userId, cardId) {
     return row?.last ? addDays(row.last, 1) : null;
 }
 
+// Horarios da sync automatica (hora local do servidor, mesma referencia do
+// node-cron). O Meu Pluggy atualiza os dados com o banco ~1x por dia em
+// horario que nao controlamos -- rodar algumas vezes ao dia pega essa
+// atualizacao sem muito atraso.
+export const SYNC_SCHEDULE = { minute: 45, hours: [1, 7, 13, 19] };
+export const SYNC_CRON_EXPRESSION = `${SYNC_SCHEDULE.minute} ${SYNC_SCHEDULE.hours.join(',')} * * *`;
+
+export function nextScheduledSync(now = new Date()) {
+    for (let dayOffset = 0; dayOffset <= 1; dayOffset += 1) {
+        for (const hour of SYNC_SCHEDULE.hours) {
+            const candidate = new Date(now);
+            candidate.setDate(candidate.getDate() + dayOffset);
+            candidate.setHours(hour, SYNC_SCHEDULE.minute, 0, 0);
+            if (candidate > now) return candidate;
+        }
+    }
+    return null;
+}
+
+// Mantemos so as ultimas execucoes por vinculo -- o suficiente para ver
+// tendencia (falhas recorrentes, duracao) sem a tabela crescer sem limite.
+const RUNS_KEPT_PER_LINK = 200;
+
+function recordRun(link, { trigger, status, startedAt, remoteCount = null, summary = null, message = null }) {
+    db.prepare(
+        `INSERT INTO pluggy_sync_runs (link_id, user_id, trigger, status, started_at, duration_ms, remote_count, inserted, updated, deleted, bills_registered, message)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    ).run(
+        link.id, link.user_id, trigger, status,
+        startedAt.toISOString().replace('T', ' ').slice(0, 19), Date.now() - startedAt.getTime(), remoteCount,
+        summary?.inserted ?? 0, summary?.updated ?? 0, summary?.deleted ?? 0, summary?.billsRegistered ?? 0, message
+    );
+    db.prepare(
+        `DELETE FROM pluggy_sync_runs WHERE link_id = ? AND id NOT IN (
+             SELECT id FROM pluggy_sync_runs WHERE link_id = ? ORDER BY id DESC LIMIT ?
+         )`
+    ).run(link.id, link.id, RUNS_KEPT_PER_LINK);
+}
+
 const runningLinks = new Set();
 
-export async function syncCardLink(linkId) {
+// `trigger`: CRON (agendada), MANUAL (botao "sincronizar agora") ou LINK
+// (primeira sync ao vincular) -- so' para o historico de monitoramento.
+export async function syncCardLink(linkId, { trigger = 'MANUAL' } = {}) {
     if (runningLinks.has(linkId)) return { skipped: true };
     runningLinks.add(linkId);
 
+    const startedAt = new Date();
     const setStatus = db.prepare(
         'UPDATE pluggy_card_links SET last_sync_at = CURRENT_TIMESTAMP, last_sync_status = ?, last_sync_message = ? WHERE id = ?'
     );
+    const link = db.prepare('SELECT * FROM pluggy_card_links WHERE id = ?').get(linkId);
+    let remoteCount = null;
 
     try {
-        const link = db.prepare('SELECT * FROM pluggy_card_links WHERE id = ?').get(linkId);
         if (!link) throw new Error('Vinculo nao encontrado');
         const card = db.prepare('SELECT * FROM credit_cards WHERE id = ? AND user_id = ?').get(link.card_id, link.user_id);
         if (!card) throw new Error('Cartao vinculado nao encontrado');
@@ -377,6 +421,7 @@ export async function syncCardLink(linkId) {
             listTransactions(link.pluggy_account_id),
             listBills(link.pluggy_account_id),
         ]);
+        remoteCount = remoteTxns.length;
 
         const payments = remoteTxns.filter(isCardPayment);
         const desired = buildDesiredRows(link.pluggy_account_id, remoteTxns.filter((t) => !isCardPayment(t)))
@@ -395,17 +440,36 @@ export async function syncCardLink(linkId) {
 
             const summary = { ...counts, billsRegistered };
             setStatus.run('OK', JSON.stringify(summary), link.id);
+            recordRun(link, { trigger, status: 'OK', startedAt, remoteCount, summary });
             return summary;
         })();
 
         checkBudgetAlerts(link.user_id);
         return result;
     } catch (err) {
-        setStatus.run('ERROR', err.message, linkId);
+        if (link) {
+            setStatus.run('ERROR', err.message, link.id);
+            recordRun(link, { trigger, status: 'ERROR', startedAt, remoteCount, message: err.message });
+            alertSyncFailure(link, err.message);
+        }
         throw err;
     } finally {
         runningLinks.delete(linkId);
     }
+}
+
+// No maximo um alerta por dia por cartao -- uma conexao quebrada falharia a
+// cada execucao do cron e inundaria a lista de alertas.
+function alertSyncFailure(link, message) {
+    const key = `vinculo-${link.id}`;
+    if (alreadyAlertedToday(link.user_id, 'PLUGGY_SYNC', key)) return;
+    const card = db.prepare('SELECT card_name FROM credit_cards WHERE id = ?').get(link.card_id);
+    raiseAlert({
+        userId: link.user_id,
+        type: 'PLUGGY_SYNC',
+        severity: 'WARNING',
+        message: `Falha ao sincronizar o cartao "${card?.card_name ?? link.card_id}" com o banco (${key}): ${message}`,
+    });
 }
 
 // Chamado pelo cron: sincroniza todos os cartoes vinculados, sem deixar a
@@ -414,9 +478,219 @@ export async function syncAllLinks() {
     const links = db.prepare('SELECT id FROM pluggy_card_links').all();
     for (const { id } of links) {
         try {
-            await syncCardLink(id);
+            await syncCardLink(id, { trigger: 'CRON' });
         } catch (err) {
             console.error(`Erro na sync Pluggy do vinculo ${id}:`, err.message);
+        }
+    }
+}
+
+// ---------- Monitoramento de conexoes ----------
+
+// Sync roda a cada 6h: sem sucesso ha mais de 7h significa que pelo menos
+// uma execucao agendada falhou ou nao rodou (servidor fora do ar).
+const LINK_STALE_HOURS = 7;
+// Meu Pluggy atualiza com o banco a cada ~24h: 48h sem atualizar indica
+// problema na conexao com o banco (consentimento, instabilidade).
+const ITEM_STALE_HOURS = 48;
+// Consentimento do Open Finance vale 12 meses e precisa ser renovado no
+// app do banco / meu.pluggy.ai antes de expirar.
+const CONSENT_WARNING_DAYS = 30;
+
+const LEVEL_ORDER = { ok: 0, warning: 1, error: 2 };
+const worstLevel = (levels) => levels.reduce((worst, l) => (LEVEL_ORDER[l] > LEVEL_ORDER[worst] ? l : worst), 'ok');
+const hoursSince = (date, now) => (now - date) / 3_600_000;
+const parseSqliteUtc = (value) => new Date(`${value.replace(' ', 'T')}Z`);
+
+const PRODUCT_LABELS = { accounts: 'contas', creditCards: 'cartoes', transactions: 'lancamentos', investments: 'investimentos', identity: 'identidade' };
+
+function evaluateItem(item, now) {
+    const issues = [];
+    if (['LOGIN_ERROR', 'WAITING_USER_INPUT', 'OUTDATED'].includes(item.status)) {
+        issues.push({ level: 'error', message: `Conexao com o banco com status ${item.status} (${item.executionStatus}). Reconecte o banco em meu.pluggy.ai.` });
+    }
+    if (item.error?.message) {
+        issues.push({ level: 'error', message: `Erro informado pela Pluggy: ${item.error.message}` });
+    }
+    if (item.executionStatus === 'PARTIAL_SUCCESS') {
+        const failed = Object.entries(item.statusDetail || {})
+            .filter(([, detail]) => detail && detail.isUpdated === false)
+            .map(([product]) => PRODUCT_LABELS[product] || product);
+        issues.push({
+            level: 'warning',
+            message: `Ultima atualizacao do banco foi parcial${failed.length ? ` (falhou: ${failed.join(', ')})` : ''}.`,
+        });
+    }
+    if (item.autoSyncDisabledAt) {
+        issues.push({ level: 'error', message: 'A Pluggy desativou a atualizacao automatica desta conexao. Reconecte o banco em meu.pluggy.ai.' });
+    }
+    if (item.lastUpdatedAt && hoursSince(new Date(item.lastUpdatedAt), now) > ITEM_STALE_HOURS) {
+        issues.push({
+            level: 'warning',
+            message: `Dados do banco nao sao atualizados ha ${Math.floor(hoursSince(new Date(item.lastUpdatedAt), now))}h.`,
+        });
+    }
+    if (item.consentExpiresAt) {
+        const daysLeft = Math.floor((new Date(item.consentExpiresAt) - now) / 86_400_000);
+        if (daysLeft < 0) {
+            issues.push({ level: 'error', message: 'O consentimento do Open Finance expirou. Renove a conexao em meu.pluggy.ai.' });
+        } else if (daysLeft <= CONSENT_WARNING_DAYS) {
+            issues.push({ level: 'warning', message: `O consentimento do Open Finance expira em ${daysLeft} dias. Renove em meu.pluggy.ai.` });
+        }
+    }
+    return { level: worstLevel(issues.map((i) => i.level)), issues };
+}
+
+function evaluateLink(link, now) {
+    const issues = [];
+    if (link.last_sync_status === 'ERROR') {
+        issues.push({ level: 'error', message: `Ultima sincronizacao falhou: ${link.last_sync_message}` });
+    }
+    if (!link.last_sync_at) {
+        issues.push({ level: 'warning', message: 'Ainda nao sincronizado.' });
+    } else {
+        const lastOk = db
+            .prepare("SELECT MAX(started_at) AS at FROM pluggy_sync_runs WHERE link_id = ? AND status = 'OK'")
+            .get(link.id)?.at;
+        const reference = lastOk ? parseSqliteUtc(lastOk) : null;
+        // Falhando sem nunca ter tido sucesso, o erro acima ja diz tudo.
+        const redundant = !reference && link.last_sync_status === 'ERROR';
+        if (!redundant && (!reference || hoursSince(reference, now) > LINK_STALE_HOURS)) {
+            issues.push({
+                level: 'warning',
+                message: reference
+                    ? `Sem sincronizacao bem-sucedida ha ${Math.floor(hoursSince(reference, now))}h.`
+                    : 'Nenhuma sincronizacao bem-sucedida registrada.',
+            });
+        }
+    }
+    return { level: worstLevel(issues.map((i) => i.level)), issues };
+}
+
+// Status do item mudam pouco (Meu Pluggy atualiza ~1x/dia) e a tela de
+// monitoramento faz polling -- cache curto evita bater na Pluggy a cada
+// refresh. `refresh` (botao "verificar agora") ignora o cache.
+const ITEM_CACHE_MS = 60_000;
+const itemCache = new Map(); // itemId -> { at, value }
+
+async function fetchItemStatus(itemId, { refresh }) {
+    const cached = itemCache.get(itemId);
+    if (!refresh && cached && Date.now() - cached.at < ITEM_CACHE_MS) return cached.value;
+
+    const startedAt = Date.now();
+    let value;
+    try {
+        const item = await getItem(itemId);
+        value = { item, latencyMs: Date.now() - startedAt, fetchError: null };
+    } catch (err) {
+        value = { item: null, latencyMs: Date.now() - startedAt, fetchError: err.message };
+    }
+    itemCache.set(itemId, { at: Date.now(), value });
+    return value;
+}
+
+function describeItem(itemId, { item, latencyMs, fetchError }, now) {
+    if (fetchError) {
+        return {
+            id: itemId,
+            connector: null,
+            latencyMs,
+            level: 'error',
+            issues: [{ level: 'error', message: `Nao foi possivel consultar a Pluggy: ${fetchError}` }],
+        };
+    }
+    return {
+        id: itemId,
+        connector: item.connector?.name ?? null,
+        status: item.status,
+        executionStatus: item.executionStatus,
+        lastUpdatedAt: item.lastUpdatedAt,
+        nextAutoSyncAt: item.nextAutoSyncAt,
+        consentExpiresAt: item.consentExpiresAt,
+        latencyMs,
+        ...evaluateItem(item, now),
+    };
+}
+
+export async function getConnectionsStatus(userId, { refresh = false } = {}) {
+    const now = new Date();
+    const items = [];
+    for (const itemId of getItemIds()) {
+        items.push(describeItem(itemId, await fetchItemStatus(itemId, { refresh }), now));
+    }
+
+    const since24h = new Date(now - 86_400_000).toISOString().replace('T', ' ').slice(0, 19);
+    const links = db
+        .prepare(
+            `SELECT l.*, c.card_name FROM pluggy_card_links l
+             JOIN credit_cards c ON c.id = l.card_id
+             WHERE l.user_id = ? ORDER BY l.id`
+        )
+        .all(userId)
+        .map((link) => {
+            const stats = db
+                .prepare(
+                    `SELECT COUNT(*) AS runs, SUM(status = 'ERROR') AS errors, ROUND(AVG(duration_ms)) AS avg_duration_ms
+                     FROM pluggy_sync_runs WHERE link_id = ? AND started_at >= ?`
+                )
+                .get(link.id, since24h);
+            let summary = null;
+            if (link.last_sync_status === 'OK') {
+                try { summary = JSON.parse(link.last_sync_message); } catch { summary = null; }
+            }
+            return {
+                id: link.id,
+                card_id: link.card_id,
+                card_name: link.card_name,
+                sync_from: link.sync_from,
+                last_sync_at: link.last_sync_at,
+                last_sync_status: link.last_sync_status,
+                last_sync_summary: summary,
+                stats24h: { runs: stats.runs, errors: stats.errors || 0, avgDurationMs: stats.avg_duration_ms },
+                ...evaluateLink(link, now),
+            };
+        });
+
+    const runs = db
+        .prepare(
+            `SELECT r.*, c.card_name FROM pluggy_sync_runs r
+             JOIN pluggy_card_links l ON l.id = r.link_id
+             JOIN credit_cards c ON c.id = l.card_id
+             WHERE r.user_id = ? ORDER BY r.id DESC LIMIT 50`
+        )
+        .all(userId);
+
+    return {
+        checkedAt: now.toISOString(),
+        overall: worstLevel([...items, ...links].map((x) => x.level)),
+        nextScheduledSyncAt: links.length ? nextScheduledSync(now)?.toISOString() ?? null : null,
+        items,
+        links,
+        runs,
+    };
+}
+
+// Chamado pelo cron depois da sync: alerta problemas na conexao com o banco
+// (consentimento vencendo, Meu Pluggy sem atualizar) que a sync em si nao
+// detecta -- ela so' le o que a Pluggy guardou, que pode estar velho.
+export async function checkConnectionsHealth() {
+    const userIds = db.prepare('SELECT DISTINCT user_id FROM pluggy_card_links').all().map((r) => r.user_id);
+    if (userIds.length === 0) return;
+
+    const now = new Date();
+    for (const itemId of getItemIds()) {
+        const described = describeItem(itemId, await fetchItemStatus(itemId, { refresh: true }), now);
+        if (described.level === 'ok') continue;
+
+        const key = `conexao-${itemId.slice(0, 8)}`;
+        for (const userId of userIds) {
+            if (alreadyAlertedToday(userId, 'PLUGGY_CONNECTION', key)) continue;
+            raiseAlert({
+                userId,
+                type: 'PLUGGY_CONNECTION',
+                severity: described.level === 'error' ? 'CRITICAL' : 'WARNING',
+                message: `Conexao Open Finance ${described.connector ?? ''} (${key}): ${described.issues.map((i) => i.message).join(' ')}`,
+            });
         }
     }
 }

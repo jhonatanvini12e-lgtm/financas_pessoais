@@ -15,6 +15,7 @@ const NAV_ITEMS = [
     { to: '/categories', label: 'Categorias' },
     { to: '/budget', label: 'Orcamento' },
     { to: '/accounts', label: 'Contas e Cartoes' },
+    { to: '/connections', label: 'Conexoes Open Finance' },
     { to: '/invoice-export', label: 'Exportacao de Fatura' },
     { to: '/bills', label: 'Contas a Pagar' },
     { to: '/debts', label: 'Dividas' },

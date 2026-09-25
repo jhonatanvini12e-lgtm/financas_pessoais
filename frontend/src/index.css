@@ -534,6 +534,15 @@ a {
   margin-bottom: 0;
 }
 
+/* Botao de acao ao lado do titulo: .btn-primary ocupa 100% por padrao
+   (formularios), aqui precisa ficar do tamanho do texto. */
+.page-header-row .btn-primary {
+  width: auto;
+  flex-shrink: 0;
+  padding: 10px 18px;
+  font-size: 14px;
+}
+
 .page h2 {
   font-size: 15px;
   margin-bottom: 14px;

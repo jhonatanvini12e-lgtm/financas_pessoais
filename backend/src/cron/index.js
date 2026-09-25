@@ -4,7 +4,7 @@ import { runBackup } from '../services/backupService.js';
 import { runCardChecks } from '../services/cardService.js';
 import { checkBudgetAlerts } from '../services/budgetEngine.js';
 import { runBillChecks } from '../services/billsService.js';
-import { syncAllLinks } from '../services/pluggySyncService.js';
+import { syncAllLinks, checkConnectionsHealth, SYNC_CRON_EXPRESSION } from '../services/pluggySyncService.js';
 import { isPluggyConfigured } from '../services/pluggyClient.js';
 
 function allUserIds() {
@@ -52,15 +52,17 @@ export function startCronJobs() {
         }
     });
 
-    // Sync dos cartoes vinculados a Pluggy a cada 6h. O Meu Pluggy atualiza
-    // os dados com o banco ~1x por dia, em horario que nao controlamos --
-    // rodar algumas vezes ao dia pega a atualizacao sem muito atraso, e
-    // antes das checagens das 08:00 (07:45) para os alertas ja verem a
-    // fatura atualizada. So' le dados ja guardados na Pluggy, nao consome a
-    // cota de chamadas do Open Finance.
+    // Sync dos cartoes vinculados a Pluggy a cada 6h (horarios em
+    // pluggySyncService.SYNC_SCHEDULE), uma delas antes das checagens das
+    // 08:00 para os alertas ja verem a fatura atualizada. So' le dados ja
+    // guardados na Pluggy, nao consome a cota de chamadas do Open Finance.
+    // Depois confere a saude das conexoes (consentimento, Meu Pluggy sem
+    // atualizar) e gera alertas.
     if (isPluggyConfigured()) {
-        cron.schedule('45 1,7,13,19 * * *', () => {
-            syncAllLinks().catch((err) => console.error('Erro na sync Pluggy agendada:', err.message));
+        cron.schedule(SYNC_CRON_EXPRESSION, () => {
+            syncAllLinks()
+                .then(checkConnectionsHealth)
+                .catch((err) => console.error('Erro na sync Pluggy agendada:', err.message));
         });
     }
 

@@ -64,10 +64,12 @@ export const backupsRateLimiter = rateLimit({
 
 // Cada chamada consulta a API da Pluggy (varias requisicoes por cartao) --
 // limite folgado para uso manual, mas que impede loop/abuso de esgotar a
-// cota da aplicacao na Pluggy.
+// cota da aplicacao na Pluggy. GET /status (tela de monitoramento, com
+// polling) fica de fora: usa cache curto e quase nao chama a Pluggy.
 export const pluggyRateLimiter = rateLimit({
     windowMs: 15 * 60 * 1000,
     max: 30,
+    skip: (req) => req.method === 'GET' && req.path === '/status' && req.query.refresh !== '1',
     standardHeaders: true,
     legacyHeaders: false,
     message: { error: 'Muitas sincronizacoes com o banco. Tente novamente em alguns minutos.' },
