@@ -30,6 +30,11 @@ services:
     depends_on:
       - backend
 
+# Nomes fixos: os volumes foram criados quando o projeto ficava em
+# Documentos/xxx (projeto compose "xxx"). Sem `name`, o compose prefixa com o
+# nome da pasta atual e sobe com um banco novo e vazio em vez do existente.
 volumes:
   finance_data:
+    name: xxx_finance_data
   finance_backups:
+    name: xxx_finance_backups
