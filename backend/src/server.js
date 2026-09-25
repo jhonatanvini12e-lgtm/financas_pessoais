@@ -38,6 +38,7 @@ import alertsRoutes from './routes/alerts.js';
 import backupsRoutes from './routes/backups.js';
 import dashboardRoutes from './routes/dashboard.js';
 import pluggyRoutes from './routes/pluggy.js';
+import analyticsRoutes from './routes/analytics.js';
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -89,6 +90,7 @@ app.use('/api/investments', authMiddleware, investmentsRoutes);
 app.use('/api/alerts', authMiddleware, alertsRoutes);
 app.use('/api/backups', authMiddleware, backupsRoutes);
 app.use('/api/dashboard', authMiddleware, dashboardRoutes);
+app.use('/api/analytics', authMiddleware, analyticsRoutes);
 app.use('/api/pluggy', authMiddleware, pluggyRateLimiter, pluggyRoutes);
 
 // Handler de erro global: precisa vir depois de todas as rotas. Sem ele, uma

@@ -22,6 +22,7 @@ const NAV_ITEMS = [
     { to: '/caixinhas-investimentos', label: 'Caixinhas e Investimentos' },
     { to: '/turning-point', label: 'Ponto de Virada' },
     { to: '/intelligence', label: 'Inteligencia Financeira' },
+    { to: '/analytics', label: 'Analises' },
     { to: '/alerts', label: 'Alertas' },
     { to: '/settings', label: 'Configuracoes' },
 ];

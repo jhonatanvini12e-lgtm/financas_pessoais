@@ -15,6 +15,7 @@ import Bills from './pages/Bills.jsx';
 import CaixinhasInvestimentos from './pages/CaixinhasInvestimentos.jsx';
 import TurningPoint from './pages/TurningPoint.jsx';
 import Intelligence from './pages/Intelligence.jsx';
+import Analytics from './pages/Analytics.jsx';
 import Alerts from './pages/Alerts.jsx';
 import Settings from './pages/Settings.jsx';
 import ConnectionsMonitor from './pages/ConnectionsMonitor.jsx';
@@ -44,6 +45,7 @@ function App() {
                 <Route path="/banks" element={<Navigate to="/invoice-export" replace />} />
                 <Route path="/turning-point" element={<TurningPoint />} />
                 <Route path="/intelligence" element={<Intelligence />} />
+                <Route path="/analytics" element={<Analytics />} />
                 <Route path="/connections" element={<ConnectionsMonitor />} />
                 <Route path="/alerts" element={<Alerts />} />
                 <Route path="/settings" element={<Settings />} />
