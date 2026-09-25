@@ -3,6 +3,8 @@ import { api } from '../api/client.js';
 import LineChartCard from '../components/charts/LineChartCard.jsx';
 import BarChartCard from '../components/charts/BarChartCard.jsx';
 
+const formatIntegerCurrency = (value) => `R$ ${Math.round(value || 0).toLocaleString('pt-BR')}`;
+
 export default function Intelligence() {
     const [data3, setData3] = useState(null);
     const [data6, setData6] = useState(null);
@@ -29,6 +31,7 @@ export default function Intelligence() {
                         { key: 'income', name: 'Receita', color: '#22c55e' },
                         { key: 'expense', name: 'Despesa', color: '#ef4444' },
                     ]}
+                    valueFormatter={formatIntegerCurrency}
                 />
                 <LineChartCard
                     title="Ultimos 6 meses"
@@ -38,6 +41,7 @@ export default function Intelligence() {
                         { key: 'income', name: 'Receita', color: '#22c55e' },
                         { key: 'expense', name: 'Despesa', color: '#ef4444' },
                     ]}
+                    valueFormatter={formatIntegerCurrency}
                 />
             </div>
 
@@ -47,12 +51,14 @@ export default function Intelligence() {
                     data={data3.byCategory}
                     xKey="category"
                     bars={[{ key: 'total', name: 'Total', color: '#8b5cf6' }]}
+                    valueFormatter={formatIntegerCurrency}
                 />
                 <BarChartCard
                     title="Gastos por categoria (6 meses)"
                     data={data6.byCategory}
                     xKey="category"
                     bars={[{ key: 'total', name: 'Total', color: '#06b6d4' }]}
+                    valueFormatter={formatIntegerCurrency}
                 />
             </div>
         </div>

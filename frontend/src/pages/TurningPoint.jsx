@@ -2,6 +2,8 @@ import { useEffect, useState } from 'react';
 import { api } from '../api/client.js';
 import LineChartCard from '../components/charts/LineChartCard.jsx';
 
+const formatIntegerCurrency = (value) => `R$ ${Math.round(value || 0).toLocaleString('pt-BR')}`;
+
 export default function TurningPoint() {
     const [data, setData] = useState(null);
     const [error, setError] = useState('');
@@ -37,6 +39,7 @@ export default function TurningPoint() {
                         { key: 'cumulativeDebtInterest', name: 'Juros acumulados (dividas)', color: '#ef4444' },
                     ]}
                     height={360}
+                    valueFormatter={formatIntegerCurrency}
                 />
             </section>
         </div>
