@@ -7,6 +7,8 @@ export default function Categories() {
     const [categories, setCategories] = useState([]);
     const [error, setError] = useState('');
     const [form, setForm] = useState({ name: '', type: 'EXPENSE', keywords: '', budget_limit: '' });
+    const [editingId, setEditingId] = useState(null);
+    const [editForm, setEditForm] = useState({ name: '', type: 'EXPENSE', keywords: '', budget_limit: '' });
     const { hideValues } = usePrivacy();
 
     const load = () => { api.get('/categories').then(setCategories).catch((err) => setError(err.message)); };
@@ -24,8 +26,32 @@ export default function Categories() {
     };
 
     const remove = async (id) => {
-        await api.delete(`/categories/${id}`);
-        load();
+        try {
+            await api.delete(`/categories/${id}`);
+            load();
+        } catch (err) {
+            setError(err.message);
+        }
+    };
+
+    const startEdit = (c) => {
+        setEditingId(c.id);
+        setEditForm({ name: c.name, type: c.type, keywords: c.keywords || '', budget_limit: String(c.budget_limit ?? '') });
+        setError('');
+    };
+
+    const cancelEdit = () => {
+        setEditingId(null);
+    };
+
+    const saveEdit = async (id) => {
+        try {
+            await api.put(`/categories/${id}`, { ...editForm, budget_limit: Number(editForm.budget_limit) || 0 });
+            setEditingId(null);
+            load();
+        } catch (err) {
+            setError(err.message);
+        }
     };
 
     return (
@@ -58,11 +84,35 @@ export default function Categories() {
                     <tbody>
                         {categories.map((c) => (
                             <tr key={c.id}>
-                                <td>{c.name}</td>
-                                <td>{c.type === 'EXPENSE' ? 'Despesa' : 'Receita'}</td>
-                                <td>{c.keywords}</td>
-                                <td>{formatCurrency(c.budget_limit, hideValues)}</td>
-                                <td><button className="btn-link" onClick={() => remove(c.id)}>remover</button></td>
+                                {editingId === c.id ? (
+                                    <>
+                                        <td><input value={editForm.name} onChange={(e) => setEditForm({ ...editForm, name: e.target.value })} /></td>
+                                        <td>
+                                            <select value={editForm.type} onChange={(e) => setEditForm({ ...editForm, type: e.target.value })}>
+                                                <option value="EXPENSE">Despesa</option>
+                                                <option value="INCOME">Receita</option>
+                                            </select>
+                                        </td>
+                                        <td><input value={editForm.keywords} onChange={(e) => setEditForm({ ...editForm, keywords: e.target.value })} /></td>
+                                        <td><input type="number" step="0.01" value={editForm.budget_limit}
+                                            onChange={(e) => setEditForm({ ...editForm, budget_limit: e.target.value })} /></td>
+                                        <td className="row-actions">
+                                            <button className="btn-link" onClick={() => saveEdit(c.id)}>salvar</button>
+                                            <button className="btn-link" onClick={cancelEdit}>cancelar</button>
+                                        </td>
+                                    </>
+                                ) : (
+                                    <>
+                                        <td>{c.name}</td>
+                                        <td>{c.type === 'EXPENSE' ? 'Despesa' : 'Receita'}</td>
+                                        <td>{c.keywords}</td>
+                                        <td>{formatCurrency(c.budget_limit, hideValues)}</td>
+                                        <td className="row-actions">
+                                            <button className="btn-icon" title="Editar categoria" aria-label="Editar categoria" onClick={() => startEdit(c)}>✎</button>
+                                            <button className="btn-link" onClick={() => remove(c.id)}>remover</button>
+                                        </td>
+                                    </>
+                                )}
                             </tr>
                         ))}
                     </tbody>
