@@ -5,6 +5,7 @@ import HideValuesToggle from '../components/HideValuesToggle.jsx';
 import { usePrivacy } from '../context/PrivacyContext.jsx';
 import { formatCurrency } from '../utils/currency.js';
 import { PROVIDERS } from '../constants/providers.js';
+import OpenFinanceCards from '../components/OpenFinanceCards.jsx';
 
 export default function Accounts() {
     const [accounts, setAccounts] = useState([]);
@@ -142,6 +143,8 @@ export default function Accounts() {
                     </form>
                 </section>
             </div>
+
+            <OpenFinanceCards onChange={load} />
         </div>
     );
 }

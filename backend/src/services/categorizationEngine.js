@@ -12,7 +12,9 @@ import db from '../db/index.js';
 // aprendemos com o proprio historico: se o usuario ja categorizou (manualmente
 // ou via regra) um lancamento com a mesma descricao antes, reaproveitamos essa
 // categoria da proxima vez que a mesma descricao aparecer.
-function normalizeForMatch(description) {
+// Tambem usado pela sync da Pluggy para reconhecer o mesmo lancamento entre
+// sincronizacoes (ver pluggySyncService.js).
+export function normalizeForMatch(description) {
     return String(description ?? '')
         .toLowerCase()
         // remove o contador de parcela ("(8/12)") pra que todas as parcelas

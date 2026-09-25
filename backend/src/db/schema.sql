@@ -206,6 +206,27 @@ CREATE TABLE IF NOT EXISTS card_invoice_payments (
     UNIQUE(card_id, period)
 );
 
+-- Vinculo entre um cartao local e uma conta de cartao de credito na Pluggy
+-- (Open Finance via Meu Pluggy, ver services/pluggySyncService.js). A sync
+-- so mexe em lancamentos com data >= sync_from -- o que veio antes disso
+-- (ex: faturas ja importadas por arquivo) fica intocado. created_by e quem
+-- aparece como "quem realizou o gasto" nos lancamentos sincronizados.
+CREATE TABLE IF NOT EXISTS pluggy_card_links (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL,
+    card_id INTEGER NOT NULL UNIQUE,
+    pluggy_account_id TEXT NOT NULL UNIQUE,
+    created_by INTEGER NOT NULL,
+    sync_from TEXT NOT NULL,
+    last_sync_at DATETIME,
+    last_sync_status TEXT,
+    last_sync_message TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY(user_id) REFERENCES users(id),
+    FOREIGN KEY(card_id) REFERENCES credit_cards(id) ON DELETE CASCADE,
+    FOREIGN KEY(created_by) REFERENCES users(id)
+);
+
 CREATE TABLE IF NOT EXISTS debts (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     user_id INTEGER NOT NULL,

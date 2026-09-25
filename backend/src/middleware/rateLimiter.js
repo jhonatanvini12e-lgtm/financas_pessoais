@@ -61,3 +61,14 @@ export const backupsRateLimiter = rateLimit({
     legacyHeaders: false,
     message: { error: 'Muitos backups disparados. Tente novamente mais tarde.' },
 });
+
+// Cada chamada consulta a API da Pluggy (varias requisicoes por cartao) --
+// limite folgado para uso manual, mas que impede loop/abuso de esgotar a
+// cota da aplicacao na Pluggy.
+export const pluggyRateLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000,
+    max: 30,
+    standardHeaders: true,
+    legacyHeaders: false,
+    message: { error: 'Muitas sincronizacoes com o banco. Tente novamente em alguns minutos.' },
+});

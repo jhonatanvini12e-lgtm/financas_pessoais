@@ -125,9 +125,17 @@ export function registerCardInvoiceFromImport(userId, cardId, referenceDate = ne
     const total = overrideTotal != null ? overrideTotal : invoice.total;
     if (total <= 0) return null;
 
+    return upsertCardBill(userId, card, invoice.dueDate, total);
+}
+
+// Registra/atualiza a linha avulsa de Contas a Pagar de uma fatura, uma por
+// (card_id, due_date). Usado tanto pela importacao por arquivo (vencimento
+// calculado pelo due_day do cartao) quanto pela sync da Pluggy (vencimento
+// informado pelo proprio banco).
+export function upsertCardBill(userId, card, dueDate, total) {
     const existing = db
         .prepare('SELECT * FROM bills WHERE user_id = ? AND card_id = ? AND due_date = ?')
-        .get(userId, cardId, invoice.dueDate);
+        .get(userId, card.id, dueDate);
 
     if (existing) {
         db.prepare('UPDATE bills SET expected_amount = ?, active = 1 WHERE id = ?').run(total, existing.id);
@@ -139,7 +147,7 @@ export function registerCardInvoiceFromImport(userId, cardId, referenceDate = ne
             `INSERT INTO bills (user_id, name, expected_amount, recurring, due_date, card_id)
              VALUES (?, ?, ?, 0, ?, ?)`
         )
-        .run(userId, `Fatura ${card.card_name}`, total, invoice.dueDate, cardId);
+        .run(userId, `Fatura ${card.card_name}`, total, dueDate, card.id);
     return info.lastInsertRowid;
 }
 
