@@ -318,3 +318,41 @@ CREATE TABLE IF NOT EXISTS backups (
     size_bytes INTEGER,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
+
+CREATE TABLE IF NOT EXISTS alert_preferences (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL UNIQUE,
+    -- Gasto acima de limite por categoria (semanal)
+    cat_spending_enabled INTEGER DEFAULT 0,
+    cat_spending_threshold REAL DEFAULT 500,
+    -- Total mensal acima de teto
+    monthly_ceiling_enabled INTEGER DEFAULT 0,
+    monthly_ceiling_amount REAL DEFAULT 5000,
+    -- Compra acima de valor especifico
+    large_purchase_enabled INTEGER DEFAULT 0,
+    large_purchase_amount REAL DEFAULT 200,
+    -- Fatura chegando perto do vencimento (dias antes)
+    card_due_enabled INTEGER DEFAULT 1,
+    card_due_days INTEGER DEFAULT 2,
+    -- Fatura ultrapassando valor
+    card_invoice_limit_enabled INTEGER DEFAULT 0,
+    card_invoice_limit_amount REAL DEFAULT 1000,
+    -- Saldo abaixo de valor minimo
+    low_balance_enabled INTEGER DEFAULT 0,
+    low_balance_amount REAL DEFAULT 500,
+    -- Entrada ou saida relevante na conta
+    relevant_tx_enabled INTEGER DEFAULT 0,
+    relevant_tx_amount REAL DEFAULT 100,
+    -- Resumo diario
+    daily_summary_enabled INTEGER DEFAULT 0,
+    -- Resumo semanal (dia da semana: 0=dom...6=sab)
+    weekly_summary_enabled INTEGER DEFAULT 0,
+    weekly_summary_day INTEGER DEFAULT 1,
+    -- Resumo mensal (dia do mes: 1-28)
+    monthly_summary_enabled INTEGER DEFAULT 0,
+    monthly_summary_day INTEGER DEFAULT 1,
+    -- Comparativo com periodo anterior (mensal, no 1o do mes)
+    period_comparison_enabled INTEGER DEFAULT 0,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY(user_id) REFERENCES users(id)
+);

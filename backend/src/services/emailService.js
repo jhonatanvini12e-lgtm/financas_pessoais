@@ -136,3 +136,73 @@ export const sendBudgetAlert = (categoryName, percent) =>
         `Orcamento de "${categoryName}" atingiu ${(percent * 100).toFixed(0)}%`,
         `O gasto na categoria "${categoryName}" atingiu ${(percent * 100).toFixed(0)}% do teto configurado para este mes.`
     );
+
+function brl(value) {
+    return `R$ ${Math.abs(value).toFixed(2).replace('.', ',')}`;
+}
+
+export const sendCategorySpendingAlert = (category, total, threshold) =>
+    sendMail(
+        `Gasto semanal em "${category}" acima do limite`,
+        `A categoria "${category}" acumulou ${brl(total)} nos ultimos 7 dias, ultrapassando o limite semanal de ${brl(threshold)}.`
+    );
+
+export const sendMonthlyCeilingAlert = (total, ceiling, month) =>
+    sendMail(
+        `Teto mensal de gastos atingido`,
+        `Os gastos de ${month} somam ${brl(total)}, ultrapassando o teto configurado de ${brl(ceiling)}.`
+    );
+
+export const sendLargePurchaseAlert = (amount, description, threshold) =>
+    sendMail(
+        `Compra de ${brl(amount)} registrada`,
+        `Uma compra de ${brl(amount)}${description ? ` ("${description}")` : ''} foi registrada. Valor acima do alerta de ${brl(threshold)}.`
+    );
+
+export const sendCardInvoiceLimitAlert = (cardName, total, limit) =>
+    sendMail(
+        `Fatura do cartao "${cardName}" ultrapassou o limite`,
+        `A fatura atual do cartao "${cardName}" esta em ${brl(total)}, acima do limite de alerta de ${brl(limit)}.`
+    );
+
+export const sendLowBalanceAlert = (accountName, balance, minimum) =>
+    sendMail(
+        `Saldo baixo na conta "${accountName}"`,
+        `O saldo da conta "${accountName}" esta em ${brl(balance)}, abaixo do minimo configurado de ${brl(minimum)}.`
+    );
+
+export const sendRelevantTransactionAlert = (tipo, amount, description) =>
+    sendMail(
+        `${tipo} relevante de ${brl(amount)}`,
+        `${tipo} de ${brl(amount)}${description ? ` ("${description}")` : ''} registrada na sua conta.`
+    );
+
+export const sendDailySummaryEmail = (date, entradas, saidas, qtd) =>
+    sendMail(
+        `Resumo diario - ${date}`,
+        `Hoje voce teve ${qtd} lancamento(s): entradas de ${brl(entradas)} e saidas de ${brl(saidas)}.`
+    );
+
+export const sendWeeklySummaryEmail = (entradas, saidas, qtd, topCats) => {
+    const catsText = topCats.map((c, i) => `${i + 1}. ${c.cat}: ${brl(c.total)}`).join(' | ');
+    return sendMail(
+        `Resumo semanal de gastos`,
+        `Nos ultimos 7 dias: ${qtd} lancamento(s), entradas ${brl(entradas)}, saidas ${brl(saidas)}. Top categorias: ${catsText || 'nenhuma'}.`
+    );
+};
+
+export const sendMonthlySummaryEmail = (month, entradas, saidas, qtd, topCats) => {
+    const catsText = topCats.map((c, i) => `${i + 1}. ${c.cat}: ${brl(c.total)}`).join(' | ');
+    return sendMail(
+        `Resumo mensal - ${month}`,
+        `Em ${month}: ${qtd} lancamento(s), entradas ${brl(entradas)}, saidas ${brl(saidas)}. Top categorias: ${catsText || 'nenhuma'}.`
+    );
+};
+
+export const sendPeriodComparisonEmail = (currentMonth, current, prevMonth, previous, diffPct) => {
+    const sign = diffPct > 0 ? '+' : '';
+    return sendMail(
+        `Comparativo mensal: ${sign}${diffPct.toFixed(1)}% em relacao ao mes anterior`,
+        `Gastos de ${currentMonth}: ${brl(current)}. Mes anterior (${prevMonth}): ${brl(previous)}. Variacao: ${sign}${diffPct.toFixed(1)}%.`
+    );
+};

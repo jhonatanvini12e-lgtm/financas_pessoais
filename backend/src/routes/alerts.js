@@ -1,11 +1,21 @@
 import express from 'express';
 import { listAlerts, markAlertRead, deleteAlert } from '../services/notificationEngine.js';
+import { getPreferences, upsertPreferences } from '../services/alertPreferencesService.js';
 
 const router = express.Router();
 
 router.get('/', (req, res) => {
     const onlyUnread = req.query.unread === 'true';
     res.json(listAlerts(req.user.householdId, { onlyUnread }));
+});
+
+router.get('/preferences', (req, res) => {
+    res.json(getPreferences(req.user.householdId));
+});
+
+router.put('/preferences', (req, res) => {
+    const updated = upsertPreferences(req.user.householdId, req.body);
+    res.json(updated);
 });
 
 router.patch('/:id/read', (req, res) => {

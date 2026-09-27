@@ -2,6 +2,7 @@ import db from '../db/index.js';
 import budgetParams from '../config/budgetParams.js';
 import { raiseAlert, alreadyAlertedToday } from './notificationEngine.js';
 import { sendCardDueAlert, sendCardLimitAlert } from './emailService.js';
+import { getPreferences } from './alertPreferencesService.js';
 
 // Dias de fechamento/vencimento 29-31 precisam de um teto por mes (fevereiro
 // so tem 28/29 dias) -- sem isso, `new Date(year, month, 31)` "rola" para o
@@ -83,7 +84,9 @@ export function runCardChecks(userId) {
         const dueDate = new Date(invoice.dueDate);
         const daysUntilDue = Math.ceil((dueDate - now) / (1000 * 60 * 60 * 24));
 
-        if (daysUntilDue === budgetParams.cardDueDateWarningDays && invoice.total > 0) {
+        const prefs = getPreferences(userId);
+        const dueDaysThreshold = prefs.card_due_enabled ? prefs.card_due_days : budgetParams.cardDueDateWarningDays;
+        if (daysUntilDue <= dueDaysThreshold && daysUntilDue >= 0 && invoice.total > 0) {
             const key = `fatura-${card.id}-${invoice.dueDate}`;
             if (!alreadyAlertedToday(userId, 'CARD_DUE', key)) {
                 raiseAlert({
@@ -91,7 +94,7 @@ export function runCardChecks(userId) {
                     type: 'CARD_DUE',
                     severity: 'WARNING',
                     message: `Fatura do cartao "${card.card_name}" (${key}) vence em ${invoice.dueDate}, valor R$ ${invoice.total.toFixed(2)}`,
-                    emailFn: () => sendCardDueAlert(card.card_name, invoice.dueDate, invoice.total),
+                    emailFn: prefs.card_due_enabled ? () => sendCardDueAlert(card.card_name, invoice.dueDate, invoice.total) : null,
                 });
             }
         }

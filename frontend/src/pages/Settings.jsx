@@ -3,6 +3,8 @@ import { startRegistration } from '@simplewebauthn/browser';
 import { api } from '../api/client.js';
 import { useAuth } from '../context/AuthContext.jsx';
 
+const WEEK_DAYS = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sab'];
+
 export default function Settings() {
     const { user } = useAuth();
     const [backups, setBackups] = useState([]);
@@ -12,9 +14,31 @@ export default function Settings() {
     const [webauthnDevices, setWebauthnDevices] = useState([]);
     const [registeringDevice, setRegisteringDevice] = useState(false);
     const [biometricPassword, setBiometricPassword] = useState('');
+    const [alertPrefs, setAlertPrefs] = useState(null);
+    const [savingPrefs, setSavingPrefs] = useState(false);
 
     const loadBackups = () => { api.get('/backups').then(setBackups).catch((err) => setError(err.message)); };
     useEffect(loadBackups, []);
+
+    useEffect(() => {
+        api.get('/alerts/preferences').then(setAlertPrefs).catch(() => {});
+    }, []);
+
+    const setPref = (key, value) => setAlertPrefs((p) => ({ ...p, [key]: value }));
+
+    const saveAlertPrefs = async () => {
+        setSavingPrefs(true);
+        setError('');
+        try {
+            const updated = await api.put('/alerts/preferences', alertPrefs);
+            setAlertPrefs(updated);
+            setMessage('Preferencias de alertas salvas.');
+        } catch (err) {
+            setError(err.message);
+        } finally {
+            setSavingPrefs(false);
+        }
+    };
 
     const loadWebauthnDevices = () => { api.get('/auth/webauthn/devices').then(setWebauthnDevices).catch(() => {}); };
     useEffect(loadWebauthnDevices, []);
@@ -143,6 +167,145 @@ export default function Settings() {
                 </table>
                 </div>
             </section>
+
+            {alertPrefs && (
+                <section className="card">
+                    <h2>Alertas por e-mail</h2>
+                    <p className="muted">Os e-mails sao enviados para o endereco cadastrado na sua conta.</p>
+
+                    <div className="alert-prefs-grid">
+
+                        <div className="alert-pref-row">
+                            <label className="alert-pref-toggle">
+                                <input type="checkbox" checked={!!alertPrefs.cat_spending_enabled}
+                                    onChange={(e) => setPref('cat_spending_enabled', e.target.checked ? 1 : 0)} />
+                                Gasto semanal por categoria acima de
+                            </label>
+                            <input type="number" min="0" step="10" value={alertPrefs.cat_spending_threshold}
+                                disabled={!alertPrefs.cat_spending_enabled}
+                                onChange={(e) => setPref('cat_spending_threshold', Number(e.target.value))} />
+                            <span className="alert-pref-unit">R$</span>
+                        </div>
+
+                        <div className="alert-pref-row">
+                            <label className="alert-pref-toggle">
+                                <input type="checkbox" checked={!!alertPrefs.monthly_ceiling_enabled}
+                                    onChange={(e) => setPref('monthly_ceiling_enabled', e.target.checked ? 1 : 0)} />
+                                Total mensal acima de
+                            </label>
+                            <input type="number" min="0" step="100" value={alertPrefs.monthly_ceiling_amount}
+                                disabled={!alertPrefs.monthly_ceiling_enabled}
+                                onChange={(e) => setPref('monthly_ceiling_amount', Number(e.target.value))} />
+                            <span className="alert-pref-unit">R$</span>
+                        </div>
+
+                        <div className="alert-pref-row">
+                            <label className="alert-pref-toggle">
+                                <input type="checkbox" checked={!!alertPrefs.large_purchase_enabled}
+                                    onChange={(e) => setPref('large_purchase_enabled', e.target.checked ? 1 : 0)} />
+                                Compra individual acima de
+                            </label>
+                            <input type="number" min="0" step="10" value={alertPrefs.large_purchase_amount}
+                                disabled={!alertPrefs.large_purchase_enabled}
+                                onChange={(e) => setPref('large_purchase_amount', Number(e.target.value))} />
+                            <span className="alert-pref-unit">R$</span>
+                        </div>
+
+                        <div className="alert-pref-row">
+                            <label className="alert-pref-toggle">
+                                <input type="checkbox" checked={!!alertPrefs.card_due_enabled}
+                                    onChange={(e) => setPref('card_due_enabled', e.target.checked ? 1 : 0)} />
+                                Fatura vencendo em menos de
+                            </label>
+                            <input type="number" min="1" max="30" value={alertPrefs.card_due_days}
+                                disabled={!alertPrefs.card_due_enabled}
+                                onChange={(e) => setPref('card_due_days', Number(e.target.value))} />
+                            <span className="alert-pref-unit">dias</span>
+                        </div>
+
+                        <div className="alert-pref-row">
+                            <label className="alert-pref-toggle">
+                                <input type="checkbox" checked={!!alertPrefs.card_invoice_limit_enabled}
+                                    onChange={(e) => setPref('card_invoice_limit_enabled', e.target.checked ? 1 : 0)} />
+                                Fatura do cartao acima de
+                            </label>
+                            <input type="number" min="0" step="100" value={alertPrefs.card_invoice_limit_amount}
+                                disabled={!alertPrefs.card_invoice_limit_enabled}
+                                onChange={(e) => setPref('card_invoice_limit_amount', Number(e.target.value))} />
+                            <span className="alert-pref-unit">R$</span>
+                        </div>
+
+                        <div className="alert-pref-row">
+                            <label className="alert-pref-toggle">
+                                <input type="checkbox" checked={!!alertPrefs.low_balance_enabled}
+                                    onChange={(e) => setPref('low_balance_enabled', e.target.checked ? 1 : 0)} />
+                                Saldo da conta abaixo de
+                            </label>
+                            <input type="number" min="0" step="50" value={alertPrefs.low_balance_amount}
+                                disabled={!alertPrefs.low_balance_enabled}
+                                onChange={(e) => setPref('low_balance_amount', Number(e.target.value))} />
+                            <span className="alert-pref-unit">R$</span>
+                        </div>
+
+                        <div className="alert-pref-row">
+                            <label className="alert-pref-toggle">
+                                <input type="checkbox" checked={!!alertPrefs.relevant_tx_enabled}
+                                    onChange={(e) => setPref('relevant_tx_enabled', e.target.checked ? 1 : 0)} />
+                                Entrada ou saida acima de
+                            </label>
+                            <input type="number" min="0" step="10" value={alertPrefs.relevant_tx_amount}
+                                disabled={!alertPrefs.relevant_tx_enabled}
+                                onChange={(e) => setPref('relevant_tx_amount', Number(e.target.value))} />
+                            <span className="alert-pref-unit">R$</span>
+                        </div>
+
+                        <div className="alert-pref-row">
+                            <label className="alert-pref-toggle">
+                                <input type="checkbox" checked={!!alertPrefs.daily_summary_enabled}
+                                    onChange={(e) => setPref('daily_summary_enabled', e.target.checked ? 1 : 0)} />
+                                Resumo diario de gastos (enviado as 20h)
+                            </label>
+                        </div>
+
+                        <div className="alert-pref-row">
+                            <label className="alert-pref-toggle">
+                                <input type="checkbox" checked={!!alertPrefs.weekly_summary_enabled}
+                                    onChange={(e) => setPref('weekly_summary_enabled', e.target.checked ? 1 : 0)} />
+                                Resumo semanal toda
+                            </label>
+                            <select value={alertPrefs.weekly_summary_day}
+                                disabled={!alertPrefs.weekly_summary_enabled}
+                                onChange={(e) => setPref('weekly_summary_day', Number(e.target.value))}>
+                                {WEEK_DAYS.map((d, i) => <option key={i} value={i}>{d}</option>)}
+                            </select>
+                        </div>
+
+                        <div className="alert-pref-row">
+                            <label className="alert-pref-toggle">
+                                <input type="checkbox" checked={!!alertPrefs.monthly_summary_enabled}
+                                    onChange={(e) => setPref('monthly_summary_enabled', e.target.checked ? 1 : 0)} />
+                                Resumo mensal no dia
+                            </label>
+                            <input type="number" min="1" max="28" value={alertPrefs.monthly_summary_day}
+                                disabled={!alertPrefs.monthly_summary_enabled}
+                                onChange={(e) => setPref('monthly_summary_day', Number(e.target.value))} />
+                            <span className="alert-pref-unit">de cada mes</span>
+                        </div>
+
+                        <div className="alert-pref-row">
+                            <label className="alert-pref-toggle">
+                                <input type="checkbox" checked={!!alertPrefs.period_comparison_enabled}
+                                    onChange={(e) => setPref('period_comparison_enabled', e.target.checked ? 1 : 0)} />
+                                Comparativo com o mes anterior (enviado no 1o de cada mes)
+                            </label>
+                        </div>
+                    </div>
+
+                    <button className="btn-primary" style={{ marginTop: '16px' }} onClick={saveAlertPrefs} disabled={savingPrefs}>
+                        {savingPrefs ? 'Salvando...' : 'Salvar preferencias de alertas'}
+                    </button>
+                </section>
+            )}
         </div>
     );
 }

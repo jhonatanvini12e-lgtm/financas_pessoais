@@ -8,6 +8,7 @@ import { addMonths } from '../services/statementImport/columnMapper.js';
 import { checkBudgetAlerts } from '../services/budgetEngine.js';
 import { registerCardInvoiceFromImport } from '../services/billsService.js';
 import { getCurrentInvoicePeriod } from '../services/cardService.js';
+import { checkLargePurchase, checkRelevantTransaction } from '../services/advancedAlertService.js';
 
 const router = express.Router();
 
@@ -195,6 +196,9 @@ router.post('/', (req, res) => {
     insertInstallments();
 
     checkBudgetAlerts(req.user.householdId);
+    // Alertas por valor: apenas para a 1a parcela (evita spam em parcelamentos)
+    checkLargePurchase(req.user.householdId, numericAmount, description || null);
+    checkRelevantTransaction(req.user.householdId, numericAmount, description || null);
     const created = createdIds.map((id) => db.prepare('SELECT * FROM transactions WHERE id = ?').get(id));
     res.status(201).json(totalInstallments > 1 ? created : created[0]);
 });
