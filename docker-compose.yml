@@ -23,12 +23,15 @@ services:
     restart: unless-stopped
     ports:
       - "127.0.0.1:8080:80"
+    # O nginx resolve o host "backend" ao iniciar e cai se ele nao existir;
+    # espera o healthcheck do backend (definido no Dockerfile) passar.
     depends_on:
-      - backend
+      backend:
+        condition: service_healthy
 
-# Nomes fixos: os volumes foram criados quando o projeto ficava em
-# Documentos/xxx (projeto compose "xxx"). Sem `name`, o compose prefixa com o
-# nome da pasta atual e sobe com um banco novo e vazio em vez do existente.
+# Nomes fixos (herdados do antigo projeto compose "xxx"). O banco atual ja
+# vive nestes volumes: nao renomear, senao o compose cria volumes novos e
+# sobe com um banco vazio.
 volumes:
   finance_data:
     name: xxx_finance_data
