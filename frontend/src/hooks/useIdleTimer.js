@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react';
 
-const IDLE_TIMEOUT_MS = 60 * 60 * 1000; // deve casar com inactivityTimeoutMinutes no backend
+const IDLE_TIMEOUT_MS = 120 * 60 * 1000; // deve casar com inactivityTimeoutMinutes no backend
 const ACTIVITY_EVENTS = ['mousemove', 'keydown', 'scroll', 'click', 'touchstart'];
 
 export function useIdleTimer(enabled, onIdle) {

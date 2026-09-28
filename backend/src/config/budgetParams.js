@@ -27,7 +27,9 @@ export default {
     unexpectedExpensesContributionRate: 0.1, // % da sobra (renda - despesas) media
 
     // Inatividade / seguranca de sessao.
-    inactivityTimeoutMinutes: 60,
+    // Janela livre apos o 2FA: nenhum codigo novo e pedido nesse periodo.
+    // Manter igual a IDLE_TIMEOUT_MS em frontend/src/hooks/useIdleTimer.js.
+    inactivityTimeoutMinutes: 120,
     twoFactorCodeExpiryMinutes: 60,
 
     // Backup.
