@@ -5,6 +5,13 @@ import { useAuth } from '../context/AuthContext.jsx';
 import Logo from '../components/Logo.jsx';
 import ThemeToggle from '../components/ThemeToggle.jsx';
 
+// O leitor biometrico (fingerprint/PIN via WebAuthn) pode ainda nao ter
+// reinicializado logo apos o notebook sair de suspensao (tampa fechada) --
+// nesse caso `startAuthentication` fica pendurado sem resolver nem
+// rejeitar. Sem esse timeout, a tela travava para sempre em "Aguardando
+// biometria..." sem cair pro fallback por e-mail.
+const BIOMETRIC_TIMEOUT_MS = 15000;
+
 export default function Login() {
     const { login } = useAuth();
     const [step, setStep] = useState(1); // 1: credenciais, 2: codigo por e-mail, 3: biometria
@@ -21,15 +28,24 @@ export default function Login() {
         async (id) => {
             setBiometricPending(true);
             setError('');
+            let timedOut = false;
+            const timeoutId = setTimeout(() => {
+                timedOut = true;
+                setBiometricPending(false);
+                setError('A verificacao por biometria demorou demais. Tente novamente ou use o codigo por e-mail.');
+            }, BIOMETRIC_TIMEOUT_MS);
             try {
                 const optionsJSON = await api.post('/auth/webauthn/login-options', { userId: id });
                 const assertion = await startAuthentication({ optionsJSON });
                 await api.post('/auth/webauthn/login-verify', { userId: id, ...assertion });
+                if (timedOut) return;
                 await login();
             } catch {
+                if (timedOut) return;
                 setError('Nao foi possivel confirmar a biometria. Tente novamente ou use o codigo por e-mail.');
             } finally {
-                setBiometricPending(false);
+                clearTimeout(timeoutId);
+                if (!timedOut) setBiometricPending(false);
             }
         },
         [login]
