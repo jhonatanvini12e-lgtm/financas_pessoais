@@ -48,7 +48,12 @@ export const AUTH_COOKIE_MAX_AGE_MS = parseDurationMs(JWT_EXPIRES_IN);
 function baseCookieOptions() {
     return {
         httpOnly: true,
-        secure: process.env.NODE_ENV === 'production',
+        // Um cookie "Secure" so' e' guardado pelo browser sobre HTTPS -- em HTTP
+        // (ex: localhost:8080 atras do nginx) ele e' DESCARTADO, e o login "nao
+        // cola" (a sessao nunca persiste). Por isso derivamos do esquema real do
+        // deploy (FRONTEND_URL), nao do NODE_ENV: https -> Secure; http -> sem
+        // Secure. Ao publicar em HTTPS, basta FRONTEND_URL comecar com https://.
+        secure: (process.env.FRONTEND_URL || '').startsWith('https://'),
         sameSite: 'strict',
         path: '/',
     };
