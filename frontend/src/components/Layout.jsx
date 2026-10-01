@@ -18,6 +18,7 @@ const NAV_ITEMS = [
     { to: '/connections', label: 'Conexoes Open Finance' },
     { to: '/invoice-export', label: 'Exportacao de Fatura' },
     { to: '/bills', label: 'Contas a Pagar' },
+    { to: '/notas-faturas', label: 'Notas e Faturas' },
     { to: '/debts', label: 'Dividas' },
     { to: '/caixinhas-investimentos', label: 'Caixinhas e Investimentos' },
     { to: '/turning-point', label: 'Ponto de Virada' },

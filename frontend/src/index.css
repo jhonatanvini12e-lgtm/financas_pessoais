@@ -298,6 +298,47 @@ a {
   margin-top: 12px;
 }
 
+.info-msg {
+  color: var(--positive);
+  font-size: 13px;
+  margin-top: 12px;
+}
+
+/* Abas simples (segmented control), usadas na tela de Notas e Faturas. */
+.segmented-tabs {
+  display: inline-flex;
+  gap: 4px;
+  padding: 4px;
+  margin-bottom: 20px;
+  background: var(--bg-panel);
+  border: 1px solid var(--border-glass);
+  border-radius: 10px;
+}
+
+.segmented-tabs button {
+  border: none;
+  background: transparent;
+  color: var(--text-secondary);
+  padding: 8px 18px;
+  border-radius: 7px;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.segmented-tabs button.active {
+  background: var(--accent);
+  color: #fff;
+}
+
+/* Duas colunas que viram uma no celular -- usada para os cartoes de import. */
+.form-grid-2 {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 16px;
+  margin-bottom: 20px;
+}
+
 @keyframes fadeIn {
   from { opacity: 0; transform: translateY(10px); }
   to { opacity: 1; transform: translateY(0); }

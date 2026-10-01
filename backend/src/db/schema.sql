@@ -206,6 +206,32 @@ CREATE TABLE IF NOT EXISTS card_invoice_payments (
     UNIQUE(card_id, period)
 );
 
+-- Notas fiscais (NF-e modelo 55 / NFC-e modelo 65) que o usuario importa --
+-- NAO ha API publica que entregue "todas as notas de um CPF": a pessoa
+-- alimenta via upload de XML ou cadastro da chave de acesso (ver
+-- services/fiscalNotes/ e routes/fiscalNotes.js). access_key (a chave de 44
+-- digitos) e' o identificador unico da nota na SEFAZ e serve de dedup natural
+-- -- por isso e' UNIQUE. Notas cadastradas so pela chave (sem XML) ficam com
+-- os demais campos em NULL ate alguem anexar o XML correspondente.
+CREATE TABLE IF NOT EXISTS fiscal_notes (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL,
+    access_key TEXT UNIQUE,
+    model TEXT,
+    number TEXT,
+    series TEXT,
+    issuer_name TEXT,
+    issuer_cnpj TEXT,
+    recipient_name TEXT,
+    recipient_cpf TEXT,
+    issue_date TEXT,
+    total_amount REAL,
+    xml_raw TEXT,
+    source TEXT NOT NULL DEFAULT 'xml',
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY(user_id) REFERENCES users(id)
+);
+
 -- Vinculo entre um cartao local e uma conta de cartao de credito na Pluggy
 -- (Open Finance via Meu Pluggy, ver services/pluggySyncService.js). A sync
 -- so mexe em lancamentos com data >= sync_from -- o que veio antes disso

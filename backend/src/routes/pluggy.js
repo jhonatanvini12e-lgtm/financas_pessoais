@@ -2,6 +2,7 @@ import express from 'express';
 import db from '../db/index.js';
 import { isPluggyConfigured } from '../services/pluggyClient.js';
 import { listRemoteCreditCards, suggestSyncFrom, syncCardLink, getConnectionsStatus } from '../services/pluggySyncService.js';
+import { listHouseholdBills } from '../services/pluggyBillsService.js';
 
 const router = express.Router();
 
@@ -63,6 +64,16 @@ router.get('/accounts', async (req, res) => {
             accounts: accounts.map((a) => ({ ...a, link: a.link ? linkWithCard(a.link) : null })),
             cards,
         });
+    });
+});
+
+// Faturas de cartao fechadas que o banco informou via Open Finance (valor
+// total, minimo e vencimento). Usado pela aba "Faturas" da tela de Notas e
+// Faturas -- leitura em tempo real do que a Pluggy ja guarda.
+router.get('/bills', async (req, res) => {
+    if (!isPluggyConfigured()) return res.json({ configured: false, bills: [] });
+    return withPluggyErrors(res, async () => {
+        res.json({ configured: true, bills: await listHouseholdBills() });
     });
 });
 
