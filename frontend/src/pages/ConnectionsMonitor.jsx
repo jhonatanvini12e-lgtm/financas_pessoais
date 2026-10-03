@@ -14,6 +14,7 @@ const POLL_INTERVAL_MS = 60_000;
 const LEVEL_LABEL = { ok: 'OK', warning: 'Atencao', error: 'Erro' };
 const LEVEL_BADGE = { ok: 'status-connected', warning: 'status-pending', error: 'status-error' };
 const TRIGGER_LABEL = { CRON: 'Automatica', MANUAL: 'Manual', LINK: 'Vinculo' };
+const KIND_LABEL = { CARD: 'Cartao', ACCOUNT: 'Conta' };
 
 // SQLite grava CURRENT_TIMESTAMP em UTC sem timezone; a Pluggy manda ISO.
 function parseDate(value) {
@@ -83,8 +84,9 @@ export default function ConnectionsMonitor() {
         setMessage('');
         setSyncingLinkId(link.id);
         try {
-            const { result } = await api.post(`/pluggy/links/${link.id}/sync`);
-            setMessage(`${link.card_name}: ${result.inserted} novos, ${result.updated} atualizados, ${result.deleted} removidos.`);
+            const path = link.kind === 'ACCOUNT' ? `/pluggy/bank-links/${link.id}/sync` : `/pluggy/links/${link.id}/sync`;
+            const { result } = await api.post(path);
+            setMessage(`${link.name}: ${result.inserted} novos, ${result.updated} atualizados, ${result.deleted} removidos.`);
         } catch (err) {
             setError(err.message);
         } finally {
@@ -111,7 +113,7 @@ export default function ConnectionsMonitor() {
     const issues = data
         ? [
             ...data.items.flatMap((item) => item.issues.map((i) => ({ ...i, source: `Conexao ${item.connector ?? item.id.slice(0, 8)}` }))),
-            ...data.links.flatMap((link) => link.issues.map((i) => ({ ...i, source: link.card_name }))),
+            ...data.links.flatMap((link) => link.issues.map((i) => ({ ...i, source: link.name }))),
         ].sort((a, b) => (a.level === b.level ? 0 : a.level === 'error' ? -1 : 1))
         : [];
     const runs24h = data?.links.reduce((acc, l) => ({ runs: acc.runs + l.stats24h.runs, errors: acc.errors + l.stats24h.errors }), { runs: 0, errors: 0 });
@@ -215,24 +217,25 @@ export default function ConnectionsMonitor() {
                     </section>
 
                     <section className="card">
-                        <h2>Cartoes sincronizados</h2>
+                        <h2>Cartoes e contas sincronizados</h2>
                         {data.links.length === 0 ? (
                             <p className="muted">
-                                Nenhum cartao vinculado. <Link to="/accounts">Vincule em Contas e Cartoes</Link>.
+                                Nenhum cartao ou conta vinculado. <Link to="/accounts">Vincule em Contas e Cartoes</Link>.
                             </p>
                         ) : (
                             <div className="table-scroll">
                                 <table className="data-table">
                                     <thead>
                                         <tr>
-                                            <th>Cartao</th><th>Saude</th><th>Ultima sincronizacao</th><th>Resultado</th>
+                                            <th>Tipo</th><th>Cartao/Conta</th><th>Saude</th><th>Ultima sincronizacao</th><th>Resultado</th>
                                             <th>Ultimas 24h</th><th>Sincroniza desde</th><th />
                                         </tr>
                                     </thead>
                                     <tbody>
                                         {data.links.map((link) => (
-                                            <tr key={link.id}>
-                                                <td>{link.card_name}</td>
+                                            <tr key={`${link.kind}-${link.id}`}>
+                                                <td>{KIND_LABEL[link.kind]}</td>
+                                                <td>{link.name}</td>
                                                 <td><LevelBadge level={link.level} /></td>
                                                 <td>{formatDateTime(link.last_sync_at)}<div className="muted">{formatRelative(link.last_sync_at, now)}</div></td>
                                                 <td>
@@ -267,15 +270,16 @@ export default function ConnectionsMonitor() {
                                 <table className="data-table">
                                     <thead>
                                         <tr>
-                                            <th>Quando</th><th>Cartao</th><th>Origem</th><th>Status</th><th>Duracao</th>
+                                            <th>Quando</th><th>Tipo</th><th>Cartao/Conta</th><th>Origem</th><th>Status</th><th>Duracao</th>
                                             <th>Lidos no banco</th><th>Novos</th><th>Atualizados</th><th>Removidos</th><th>Faturas</th><th>Detalhe</th>
                                         </tr>
                                     </thead>
                                     <tbody>
                                         {data.runs.map((run) => (
-                                            <tr key={run.id}>
+                                            <tr key={`${run.kind}-${run.id}`}>
                                                 <td>{formatDateTime(run.started_at)}</td>
-                                                <td>{run.card_name}</td>
+                                                <td>{KIND_LABEL[run.kind]}</td>
+                                                <td>{run.name}</td>
                                                 <td>{TRIGGER_LABEL[run.trigger]}</td>
                                                 <td><LevelBadge level={run.status === 'OK' ? 'ok' : 'error'} /></td>
                                                 <td>{formatDuration(run.duration_ms)}</td>
@@ -283,7 +287,7 @@ export default function ConnectionsMonitor() {
                                                 <td>{run.inserted}</td>
                                                 <td>{run.updated}</td>
                                                 <td>{run.deleted}</td>
-                                                <td>{run.bills_registered}</td>
+                                                <td>{run.kind === 'ACCOUNT' ? '—' : run.bills_registered}</td>
                                                 <td className="muted">{run.message || ''}</td>
                                             </tr>
                                         ))}

@@ -6,6 +6,7 @@ import { usePrivacy } from '../context/PrivacyContext.jsx';
 import { formatCurrency } from '../utils/currency.js';
 import { PROVIDERS } from '../constants/providers.js';
 import OpenFinanceCards from '../components/OpenFinanceCards.jsx';
+import OpenFinanceAccounts from '../components/OpenFinanceAccounts.jsx';
 
 export default function Accounts() {
     const [accounts, setAccounts] = useState([]);
@@ -144,6 +145,7 @@ export default function Accounts() {
                 </section>
             </div>
 
+            <OpenFinanceAccounts onChange={load} />
             <OpenFinanceCards onChange={load} />
         </div>
     );

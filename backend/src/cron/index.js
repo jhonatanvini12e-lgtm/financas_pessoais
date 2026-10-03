@@ -4,7 +4,7 @@ import { runBackup } from '../services/backupService.js';
 import { runCardChecks } from '../services/cardService.js';
 import { checkBudgetAlerts } from '../services/budgetEngine.js';
 import { runBillChecks } from '../services/billsService.js';
-import { syncAllLinks, checkConnectionsHealth, SYNC_CRON_EXPRESSION } from '../services/pluggySyncService.js';
+import { syncAllLinks, syncAllAccountLinks, checkConnectionsHealth, SYNC_CRON_EXPRESSION } from '../services/pluggySyncService.js';
 import { isPluggyConfigured } from '../services/pluggyClient.js';
 import { getPreferences } from '../services/alertPreferencesService.js';
 import {
@@ -123,8 +123,8 @@ export function startCronJobs() {
     // atualizar) e gera alertas.
     if (isPluggyConfigured()) {
         cron.schedule(SYNC_CRON_EXPRESSION, () => {
-            syncAllLinks()
-                .then(checkConnectionsHealth)
+            Promise.all([syncAllLinks(), syncAllAccountLinks()])
+                .then(() => checkConnectionsHealth())
                 .catch((err) => console.error('Erro na sync Pluggy agendada:', err.message));
         });
     }

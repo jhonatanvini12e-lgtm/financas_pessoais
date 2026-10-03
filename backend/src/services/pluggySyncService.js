@@ -568,6 +568,225 @@ export function suggestSyncFrom(userId, cardId) {
     return row?.last ? addDays(row.last, 1) : null;
 }
 
+// ---------- Sync de contas correntes/poupanca via Pluggy ----------
+//
+// Mais simples que a sync de cartao: transacao de conta nao tem parcela nem
+// fatura, e a Pluggy ja manda o valor com o sinal real (negativo = saiu da
+// conta, positivo = entrou) -- mesma convencao que o app ja usa, sem precisar
+// inverter como e' feito para cartao de credito (onde compra chega positiva).
+
+export async function listRemoteBankAccounts(userId) {
+    const links = db.prepare('SELECT * FROM pluggy_account_links WHERE user_id = ?').all(userId);
+    const linkByAccount = new Map(links.map((l) => [l.pluggy_account_id, l]));
+
+    const result = [];
+    for (const itemId of getItemIds()) {
+        const accounts = await listAccounts(itemId);
+        for (const account of accounts.filter((a) => a.type === 'BANK')) {
+            result.push({
+                id: account.id,
+                itemId,
+                name: account.name.trim(),
+                number: account.number,
+                balance: account.balance,
+                suggestedAccount: { bank_name: `${account.name.trim()} final ${account.number}` },
+                link: linkByAccount.get(account.id) || null,
+            });
+        }
+    }
+    return result;
+}
+
+export function suggestAccountSyncFrom(userId, accountId) {
+    const row = db
+        .prepare(
+            `SELECT MAX(date(date)) AS last FROM transactions
+             WHERE user_id = ? AND account_id = ? AND source != ? AND date(date) <= date('now')`
+        )
+        .get(userId, accountId, SOURCE);
+    return row?.last ? addDays(row.last, 1) : null;
+}
+
+function buildDesiredAccountRows(remoteTxns) {
+    return remoteTxns.map((txn) => ({
+        fitid: FITID_PREFIX + txn.id,
+        amount: round2(txn.amount),
+        date: toLocalDate(txn.date),
+        status: txn.status === 'POSTED' ? 'CLEARED' : 'PENDING',
+        description: (txn.description || '').trim(),
+        pluggyCategory: txn.category || null,
+    }));
+}
+
+const ACCOUNT_MATCHERS = [
+    (d, l) => d.fitid != null && l.external_fitid === d.fitid,
+    (d, l) => sameAmount(l.amount, d.amount) && l.date.slice(0, 10) === d.date && normalizeForMatch(l.description) === normalizeForMatch(d.description),
+    // Lancamento recriado pela Pluggy com data ajustada (pendente -> lancado).
+    (d, l) => sameAmount(l.amount, d.amount) && normalizeForMatch(l.description) === normalizeForMatch(d.description) && daysBetween(l.date, d.date) <= 7,
+];
+
+function reconcileAccountTransactions(link, desired) {
+    const local = db
+        .prepare('SELECT * FROM transactions WHERE user_id = ? AND account_id = ? AND date >= ?')
+        .all(link.user_id, link.account_id, link.sync_from);
+
+    const unmatched = new Set(local.map((l) => l.id));
+    const matches = new Map();
+    for (const matcher of ACCOUNT_MATCHERS) {
+        desired.forEach((d, i) => {
+            if (matches.has(i)) return;
+            const found = local.find((l) => unmatched.has(l.id) && matcher(d, l));
+            if (found) {
+                matches.set(i, found);
+                unmatched.delete(found.id);
+            }
+        });
+    }
+
+    const learningMap = buildCategoryLearningMap(link.user_id);
+    const categoriesWithKeywords = buildCategoryKeywordList(link.user_id);
+    const categoryIdByName = new Map(
+        db.prepare('SELECT id, name FROM categories WHERE user_id = ?').all(link.user_id).map((c) => [normalizeName(c.name), c.id])
+    );
+    const categorizeRow = (d) =>
+        categorize(link.user_id, d.description, learningMap, categoriesWithKeywords) ??
+        categoryIdByName.get(normalizeName(PLUGGY_CATEGORY_TO_APP[d.pluggyCategory])) ??
+        null;
+
+    const insert = db.prepare(
+        `INSERT INTO transactions (user_id, account_id, category_id, amount, date, description, status, external_fitid, source, created_by)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    );
+    const update = db.prepare(`UPDATE transactions SET amount = ?, date = ?, status = ?, external_fitid = ?, source = ? WHERE id = ?`);
+
+    let inserted = 0;
+    let updated = 0;
+    let deleted = 0;
+
+    desired.forEach((d, i) => {
+        const l = matches.get(i);
+        const values = [d.amount, d.date, d.status, d.fitid, SOURCE];
+
+        if (!l) {
+            insert.run(link.user_id, link.account_id, categorizeRow(d), d.amount, d.date, d.description, d.status, d.fitid, SOURCE, link.created_by);
+            inserted += 1;
+            return;
+        }
+
+        const current = [l.amount, l.date, l.status, l.external_fitid, l.source];
+        if (current.every((v, idx) => v === values[idx])) return;
+
+        update.run(...values, l.id);
+        updated += 1;
+        if (!sameAmount(l.amount, d.amount) || l.date !== d.date) {
+            recordHistory(link.user_id, 'UPDATE', l, db.prepare('SELECT * FROM transactions WHERE id = ?').get(l.id));
+        }
+    });
+
+    if (desired.length > 0) {
+        const remove = db.prepare('DELETE FROM transactions WHERE id = ?');
+        for (const l of local) {
+            if (!unmatched.has(l.id) || l.source !== SOURCE || l.status !== 'PENDING') continue;
+            remove.run(l.id);
+            recordHistory(link.user_id, 'DELETE', l, null);
+            deleted += 1;
+        }
+    }
+
+    return { inserted, updated, deleted };
+}
+
+function recordAccountRun(link, { trigger, status, startedAt, remoteCount = null, summary = null, message = null }) {
+    db.prepare(
+        `INSERT INTO pluggy_account_sync_runs (link_id, user_id, trigger, status, started_at, duration_ms, remote_count, inserted, updated, deleted, message)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    ).run(
+        link.id, link.user_id, trigger, status,
+        startedAt.toISOString().replace('T', ' ').slice(0, 19), Date.now() - startedAt.getTime(), remoteCount,
+        summary?.inserted ?? 0, summary?.updated ?? 0, summary?.deleted ?? 0, message
+    );
+    db.prepare(
+        `DELETE FROM pluggy_account_sync_runs WHERE link_id = ? AND id NOT IN (
+             SELECT id FROM pluggy_account_sync_runs WHERE link_id = ? ORDER BY id DESC LIMIT ?
+         )`
+    ).run(link.id, link.id, RUNS_KEPT_PER_LINK);
+}
+
+const runningAccountLinks = new Set();
+
+export async function syncAccountLink(linkId, { trigger = 'MANUAL' } = {}) {
+    if (runningAccountLinks.has(linkId)) return { skipped: true };
+    runningAccountLinks.add(linkId);
+
+    const startedAt = new Date();
+    const setStatus = db.prepare(
+        'UPDATE pluggy_account_links SET last_sync_at = CURRENT_TIMESTAMP, last_sync_status = ?, last_sync_message = ? WHERE id = ?'
+    );
+    const link = db.prepare('SELECT * FROM pluggy_account_links WHERE id = ?').get(linkId);
+    let remoteCount = null;
+
+    try {
+        if (!link) throw new Error('Vinculo nao encontrado');
+        const account = db.prepare('SELECT * FROM accounts WHERE id = ? AND user_id = ?').get(link.account_id, link.user_id);
+        if (!account) throw new Error('Conta vinculada nao encontrada');
+
+        let itemId = link.pluggy_item_id;
+        if (!itemId) {
+            itemId = await resolveItemIdForAccount(link.pluggy_account_id);
+            db.prepare('UPDATE pluggy_account_links SET pluggy_item_id = ? WHERE id = ?').run(itemId, link.id);
+        }
+
+        const remoteTxns = await listTransactions(link.pluggy_account_id, itemId);
+        remoteCount = remoteTxns.length;
+
+        const desired = buildDesiredAccountRows(remoteTxns).filter((d) => d.date >= link.sync_from);
+
+        const result = db.transaction(() => {
+            const counts = reconcileAccountTransactions(link, desired);
+            setStatus.run('OK', JSON.stringify(counts), link.id);
+            recordAccountRun(link, { trigger, status: 'OK', startedAt, remoteCount, summary: counts });
+            return counts;
+        })();
+
+        checkBudgetAlerts(link.user_id);
+        return result;
+    } catch (err) {
+        if (link) {
+            setStatus.run('ERROR', err.message, link.id);
+            recordAccountRun(link, { trigger, status: 'ERROR', startedAt, remoteCount, message: err.message });
+            alertAccountSyncFailure(link, err.message);
+        }
+        throw err;
+    } finally {
+        runningAccountLinks.delete(linkId);
+    }
+}
+
+function alertAccountSyncFailure(link, message) {
+    const key = `vinculo-conta-${link.id}`;
+    if (alreadyAlertedToday(link.user_id, 'PLUGGY_SYNC', key)) return;
+    const account = db.prepare('SELECT bank_name FROM accounts WHERE id = ?').get(link.account_id);
+    raiseAlert({
+        userId: link.user_id,
+        type: 'PLUGGY_SYNC',
+        severity: 'WARNING',
+        message: `Falha ao sincronizar a conta "${account?.bank_name ?? link.account_id}" com o banco (${key}): ${message}`,
+    });
+}
+
+// Chamado pelo cron: sincroniza todas as contas vinculadas, sem deixar a
+// falha de uma impedir as demais.
+export async function syncAllAccountLinks() {
+    const links = db.prepare('SELECT id FROM pluggy_account_links').all();
+    for (const { id } of links) {
+        try {
+            await syncAccountLink(id, { trigger: 'CRON' });
+        } catch (err) {
+            console.error(`Erro na sync Pluggy do vinculo de conta ${id}:`, err.message);
+        }
+    }
+}
+
 // Horarios da sync automatica (hora local do servidor, mesma referencia do
 // node-cron). O Meu Pluggy atualiza os dados com o banco ~1x por dia em
 // horario que nao controlamos -- rodar algumas vezes ao dia pega essa
@@ -690,7 +909,7 @@ export async function syncCardLink(linkId, { trigger = 'MANUAL' } = {}) {
 // No maximo um alerta por dia por cartao -- uma conexao quebrada falharia a
 // cada execucao do cron e inundaria a lista de alertas.
 function alertSyncFailure(link, message) {
-    const key = `vinculo-${link.id}`;
+    const key = `vinculo-cartao-${link.id}`;
     if (alreadyAlertedToday(link.user_id, 'PLUGGY_SYNC', key)) return;
     const card = db.prepare('SELECT card_name FROM credit_cards WHERE id = ?').get(link.card_id);
     raiseAlert({
@@ -770,7 +989,7 @@ function evaluateItem(item, now) {
     return { level: worstLevel(issues.map((i) => i.level)), issues };
 }
 
-function evaluateLink(link, now) {
+function evaluateLink(link, now, runsTable = 'pluggy_sync_runs') {
     const issues = [];
     if (link.last_sync_status === 'ERROR') {
         issues.push({ level: 'error', message: `Ultima sincronizacao falhou: ${link.last_sync_message}` });
@@ -779,7 +998,7 @@ function evaluateLink(link, now) {
         issues.push({ level: 'warning', message: 'Ainda nao sincronizado.' });
     } else {
         const lastOk = db
-            .prepare("SELECT MAX(started_at) AS at FROM pluggy_sync_runs WHERE link_id = ? AND status = 'OK'")
+            .prepare(`SELECT MAX(started_at) AS at FROM ${runsTable} WHERE link_id = ? AND status = 'OK'`)
             .get(link.id)?.at;
         const reference = lastOk ? parseSqliteUtc(lastOk) : null;
         // Falhando sem nunca ter tido sucesso, o erro acima ja diz tudo.
@@ -849,45 +1068,68 @@ export async function getConnectionsStatus(userId, { refresh = false } = {}) {
     }
 
     const since24h = new Date(now - 86_400_000).toISOString().replace('T', ' ').slice(0, 19);
-    const links = db
+
+    const buildLinkSummary = (link, kind, runsTable) => {
+        const stats = db
+            .prepare(
+                `SELECT COUNT(*) AS runs, SUM(status = 'ERROR') AS errors, ROUND(AVG(duration_ms)) AS avg_duration_ms
+                 FROM ${runsTable} WHERE link_id = ? AND started_at >= ?`
+            )
+            .get(link.id, since24h);
+        let summary = null;
+        if (link.last_sync_status === 'OK') {
+            try { summary = JSON.parse(link.last_sync_message); } catch { summary = null; }
+        }
+        return {
+            id: link.id,
+            kind,
+            name: link.name,
+            sync_from: link.sync_from,
+            last_sync_at: link.last_sync_at,
+            last_sync_status: link.last_sync_status,
+            last_sync_summary: summary,
+            stats24h: { runs: stats.runs, errors: stats.errors || 0, avgDurationMs: stats.avg_duration_ms },
+            ...evaluateLink(link, now, runsTable),
+        };
+    };
+
+    const cardLinks = db
         .prepare(
-            `SELECT l.*, c.card_name FROM pluggy_card_links l
+            `SELECT l.*, c.card_name AS name FROM pluggy_card_links l
              JOIN credit_cards c ON c.id = l.card_id
              WHERE l.user_id = ? ORDER BY l.id`
         )
         .all(userId)
-        .map((link) => {
-            const stats = db
-                .prepare(
-                    `SELECT COUNT(*) AS runs, SUM(status = 'ERROR') AS errors, ROUND(AVG(duration_ms)) AS avg_duration_ms
-                     FROM pluggy_sync_runs WHERE link_id = ? AND started_at >= ?`
-                )
-                .get(link.id, since24h);
-            let summary = null;
-            if (link.last_sync_status === 'OK') {
-                try { summary = JSON.parse(link.last_sync_message); } catch { summary = null; }
-            }
-            return {
-                id: link.id,
-                card_id: link.card_id,
-                card_name: link.card_name,
-                sync_from: link.sync_from,
-                last_sync_at: link.last_sync_at,
-                last_sync_status: link.last_sync_status,
-                last_sync_summary: summary,
-                stats24h: { runs: stats.runs, errors: stats.errors || 0, avgDurationMs: stats.avg_duration_ms },
-                ...evaluateLink(link, now),
-            };
-        });
+        .map((link) => buildLinkSummary(link, 'CARD', 'pluggy_sync_runs'));
 
-    const runs = db
+    const accountLinks = db
         .prepare(
-            `SELECT r.*, c.card_name FROM pluggy_sync_runs r
+            `SELECT l.*, a.bank_name AS name FROM pluggy_account_links l
+             JOIN accounts a ON a.id = l.account_id
+             WHERE l.user_id = ? ORDER BY l.id`
+        )
+        .all(userId)
+        .map((link) => buildLinkSummary(link, 'ACCOUNT', 'pluggy_account_sync_runs'));
+
+    const links = [...cardLinks, ...accountLinks];
+
+    const cardRuns = db
+        .prepare(
+            `SELECT r.*, c.card_name AS name, 'CARD' AS kind FROM pluggy_sync_runs r
              JOIN pluggy_card_links l ON l.id = r.link_id
              JOIN credit_cards c ON c.id = l.card_id
              WHERE r.user_id = ? ORDER BY r.id DESC LIMIT 50`
         )
         .all(userId);
+    const accountRuns = db
+        .prepare(
+            `SELECT r.*, a.bank_name AS name, 'ACCOUNT' AS kind FROM pluggy_account_sync_runs r
+             JOIN pluggy_account_links l ON l.id = r.link_id
+             JOIN accounts a ON a.id = l.account_id
+             WHERE r.user_id = ? ORDER BY r.id DESC LIMIT 50`
+        )
+        .all(userId);
+    const runs = [...cardRuns, ...accountRuns].sort((a, b) => b.started_at.localeCompare(a.started_at)).slice(0, 50);
 
     return {
         checkedAt: now.toISOString(),
@@ -903,7 +1145,10 @@ export async function getConnectionsStatus(userId, { refresh = false } = {}) {
 // (consentimento vencendo, Meu Pluggy sem atualizar) que a sync em si nao
 // detecta -- ela so' le o que a Pluggy guardou, que pode estar velho.
 export async function checkConnectionsHealth() {
-    const userIds = db.prepare('SELECT DISTINCT user_id FROM pluggy_card_links').all().map((r) => r.user_id);
+    const userIds = db
+        .prepare('SELECT DISTINCT user_id FROM pluggy_card_links UNION SELECT DISTINCT user_id FROM pluggy_account_links')
+        .all()
+        .map((r) => r.user_id);
     if (userIds.length === 0) return;
 
     const now = new Date();

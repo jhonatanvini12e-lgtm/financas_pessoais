@@ -279,6 +279,48 @@ CREATE TABLE IF NOT EXISTS pluggy_sync_runs (
 );
 CREATE INDEX IF NOT EXISTS idx_pluggy_sync_runs_link ON pluggy_sync_runs(link_id, started_at);
 
+-- Vinculo entre uma conta local e uma conta corrente/poupanca na Pluggy
+-- (Open Finance via Meu Pluggy, ver services/pluggySyncService.js). Mesma
+-- ideia de pluggy_card_links, mas para accounts: a sync so mexe em
+-- lancamentos com data >= sync_from.
+CREATE TABLE IF NOT EXISTS pluggy_account_links (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL,
+    account_id INTEGER NOT NULL UNIQUE,
+    pluggy_account_id TEXT NOT NULL UNIQUE,
+    pluggy_item_id TEXT,
+    created_by INTEGER NOT NULL,
+    sync_from TEXT NOT NULL,
+    last_sync_at DATETIME,
+    last_sync_status TEXT,
+    last_sync_message TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY(user_id) REFERENCES users(id),
+    FOREIGN KEY(account_id) REFERENCES accounts(id) ON DELETE CASCADE,
+    FOREIGN KEY(created_by) REFERENCES users(id)
+);
+
+-- Historico de execucoes da sync da Pluggy para contas (ver pluggy_sync_runs,
+-- equivalente para cartoes). Sem bills_registered: conta corrente nao tem
+-- fatura.
+CREATE TABLE IF NOT EXISTS pluggy_account_sync_runs (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    link_id INTEGER NOT NULL,
+    user_id INTEGER NOT NULL,
+    trigger TEXT CHECK(trigger IN ('CRON', 'MANUAL', 'LINK')) NOT NULL,
+    status TEXT CHECK(status IN ('OK', 'ERROR')) NOT NULL,
+    started_at DATETIME NOT NULL,
+    duration_ms INTEGER,
+    remote_count INTEGER,
+    inserted INTEGER DEFAULT 0,
+    updated INTEGER DEFAULT 0,
+    deleted INTEGER DEFAULT 0,
+    message TEXT,
+    FOREIGN KEY(link_id) REFERENCES pluggy_account_links(id) ON DELETE CASCADE,
+    FOREIGN KEY(user_id) REFERENCES users(id)
+);
+CREATE INDEX IF NOT EXISTS idx_pluggy_account_sync_runs_link ON pluggy_account_sync_runs(link_id, started_at);
+
 CREATE TABLE IF NOT EXISTS debts (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     user_id INTEGER NOT NULL,

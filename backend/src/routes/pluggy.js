@@ -1,7 +1,15 @@
 import express from 'express';
 import db from '../db/index.js';
 import { isPluggyConfigured } from '../services/pluggyClient.js';
-import { listRemoteCreditCards, suggestSyncFrom, syncCardLink, getConnectionsStatus } from '../services/pluggySyncService.js';
+import {
+    listRemoteCreditCards,
+    suggestSyncFrom,
+    syncCardLink,
+    listRemoteBankAccounts,
+    suggestAccountSyncFrom,
+    syncAccountLink,
+    getConnectionsStatus,
+} from '../services/pluggySyncService.js';
 import { listHouseholdBills } from '../services/pluggyBillsService.js';
 
 const router = express.Router();
@@ -26,6 +34,11 @@ function defaultSyncFrom() {
 function linkWithCard(link) {
     const card = db.prepare('SELECT id, card_name FROM credit_cards WHERE id = ?').get(link.card_id);
     return { ...link, card_name: card?.card_name ?? null, last_sync_summary: parseSummary(link) };
+}
+
+function linkWithAccount(link) {
+    const account = db.prepare('SELECT id, bank_name FROM accounts WHERE id = ?').get(link.account_id);
+    return { ...link, bank_name: account?.bank_name ?? null, last_sync_summary: parseSummary(link) };
 }
 
 function parseSummary(link) {
@@ -161,6 +174,102 @@ router.post('/links/:id/sync', async (req, res) => {
 // cartao, so param de ser atualizados.
 router.delete('/links/:id', (req, res) => {
     const result = db.prepare('DELETE FROM pluggy_card_links WHERE id = ? AND user_id = ?').run(req.params.id, req.user.householdId);
+    if (result.changes === 0) return res.status(404).json({ error: 'Vinculo nao encontrado' });
+    res.json({ ok: true });
+});
+
+// ---------- Contas correntes/poupanca (mesma ideia das rotas de cartao acima) ----------
+
+router.get('/bank-accounts', async (req, res) => {
+    if (!isPluggyConfigured()) return res.json({ configured: false, accounts: [], localAccounts: [] });
+
+    return withPluggyErrors(res, async () => {
+        const accounts = await listRemoteBankAccounts(req.user.householdId);
+        const localAccounts = db
+            .prepare('SELECT id, bank_name FROM accounts WHERE user_id = ? ORDER BY id')
+            .all(req.user.householdId)
+            .map((a) => ({ ...a, suggested_sync_from: suggestAccountSyncFrom(req.user.householdId, a.id) }));
+
+        res.json({
+            configured: true,
+            default_sync_from: defaultSyncFrom(),
+            accounts: accounts.map((a) => ({ ...a, link: a.link ? linkWithAccount(a.link) : null })),
+            localAccounts,
+        });
+    });
+});
+
+router.post('/bank-links', async (req, res) => {
+    if (!isPluggyConfigured()) return res.status(400).json({ error: 'Integracao Pluggy nao configurada no servidor' });
+
+    const { pluggy_account_id, account_id, new_account, created_by, sync_from } = req.body;
+    if (!pluggy_account_id) return res.status(400).json({ error: 'pluggy_account_id e obrigatorio' });
+    if (!isHouseholdMember(created_by, req.user.householdId)) {
+        return res.status(400).json({ error: 'Selecione qual usuario e o titular da conta' });
+    }
+    const syncFrom = sync_from || defaultSyncFrom();
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(syncFrom) || Number.isNaN(Date.parse(syncFrom))) {
+        return res.status(400).json({ error: 'sync_from deve estar no formato AAAA-MM-DD' });
+    }
+    if (db.prepare('SELECT 1 FROM pluggy_account_links WHERE pluggy_account_id = ?').get(pluggy_account_id)) {
+        return res.status(409).json({ error: 'Esta conta da Pluggy ja esta vinculada a uma conta' });
+    }
+
+    return withPluggyErrors(res, async () => {
+        // Confere que a conta existe e pertence a um dos itens configurados
+        // antes de gravar qualquer coisa.
+        const remote = (await listRemoteBankAccounts(req.user.householdId)).find((a) => a.id === pluggy_account_id);
+        if (!remote) return res.status(404).json({ error: 'Conta nao encontrada na Pluggy' });
+
+        let accountId = account_id;
+        if (accountId != null) {
+            if (!db.prepare('SELECT 1 FROM accounts WHERE id = ? AND user_id = ?').get(accountId, req.user.householdId)) {
+                return res.status(400).json({ error: 'Conta invalida' });
+            }
+            if (db.prepare('SELECT 1 FROM pluggy_account_links WHERE account_id = ?').get(accountId)) {
+                return res.status(409).json({ error: 'Esta conta ja esta vinculada a outra conta da Pluggy' });
+            }
+        } else {
+            const { bank_name, provider } = new_account || {};
+            if (!bank_name) return res.status(400).json({ error: 'Informe o nome do banco para a nova conta' });
+            const info = db
+                .prepare('INSERT INTO accounts (user_id, bank_name, provider, balance) VALUES (?, ?, ?, 0)')
+                .run(req.user.householdId, bank_name, provider || null);
+            accountId = info.lastInsertRowid;
+        }
+
+        const info = db
+            .prepare(
+                'INSERT INTO pluggy_account_links (user_id, account_id, pluggy_account_id, pluggy_item_id, created_by, sync_from) VALUES (?, ?, ?, ?, ?, ?)'
+            )
+            .run(req.user.householdId, accountId, pluggy_account_id, remote.itemId, created_by, syncFrom);
+
+        let syncError = null;
+        try {
+            await syncAccountLink(info.lastInsertRowid, { trigger: 'LINK' });
+        } catch (err) {
+            syncError = err.message;
+        }
+        const link = db.prepare('SELECT * FROM pluggy_account_links WHERE id = ?').get(info.lastInsertRowid);
+        res.status(201).json({ link: linkWithAccount(link), syncError });
+    });
+});
+
+router.post('/bank-links/:id/sync', async (req, res) => {
+    const link = db.prepare('SELECT * FROM pluggy_account_links WHERE id = ? AND user_id = ?').get(req.params.id, req.user.householdId);
+    if (!link) return res.status(404).json({ error: 'Vinculo nao encontrado' });
+
+    return withPluggyErrors(res, async () => {
+        const result = await syncAccountLink(link.id, { trigger: 'MANUAL' });
+        if (result.skipped) return res.status(409).json({ error: 'Sincronizacao desta conta ja esta em andamento' });
+        res.json({ link: linkWithAccount(db.prepare('SELECT * FROM pluggy_account_links WHERE id = ?').get(link.id)), result });
+    });
+});
+
+// Desvincular nao apaga nada: os lancamentos ja sincronizados continuam na
+// conta, so param de ser atualizados.
+router.delete('/bank-links/:id', (req, res) => {
+    const result = db.prepare('DELETE FROM pluggy_account_links WHERE id = ? AND user_id = ?').run(req.params.id, req.user.householdId);
     if (result.changes === 0) return res.status(404).json({ error: 'Vinculo nao encontrado' });
     res.json({ ok: true });
 });
