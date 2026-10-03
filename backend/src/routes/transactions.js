@@ -252,6 +252,46 @@ router.put('/:id', (req, res) => {
     res.json(updated);
 });
 
+// Reaplica a uma parcela ja editada (classificacao: categoria, quem gastou,
+// conta/cartao, base da descricao) as demais parcelas do mesmo lancamento --
+// usado quando o usuario confirma, apos editar uma parcela, que quer o mesmo
+// ajuste nas outras identicas. Valor, data e status nao sao propagados: sao
+// legitimamente diferentes parcela a parcela.
+router.put('/:id/apply-to-installments', (req, res) => {
+    const txn = db.prepare('SELECT * FROM transactions WHERE id = ? AND user_id = ?').get(req.params.id, req.user.householdId);
+    if (!txn) return res.status(404).json({ error: 'Transacao nao encontrada' });
+    if (!txn.installment_group) return res.status(400).json({ error: 'Este lancamento nao faz parte de uma compra parcelada' });
+
+    const siblings = db
+        .prepare('SELECT * FROM transactions WHERE user_id = ? AND installment_group = ? AND id != ?')
+        .all(req.user.householdId, txn.installment_group, txn.id);
+
+    const baseDescription = (txn.description || '').replace(/\s*\(\d{1,2}\/\d{1,2}\)\s*$/, '');
+    const update = db.prepare(
+        `UPDATE transactions SET category_id = ?, created_by = ?, account_id = ?, card_id = ?, description = ?
+         WHERE id = ?`
+    );
+
+    for (const sibling of siblings) {
+        const siblingDescription =
+            sibling.installment_number != null
+                ? `${baseDescription} (${sibling.installment_number}/${sibling.installment_total})`
+                : baseDescription;
+        update.run(txn.category_id, txn.created_by, txn.account_id, txn.card_id, siblingDescription, sibling.id);
+        recordTransactionHistory(req.user.householdId, 'UPDATE', sibling, {
+            ...sibling,
+            category_id: txn.category_id,
+            created_by: txn.created_by,
+            account_id: txn.account_id,
+            card_id: txn.card_id,
+            description: siblingDescription,
+        });
+    }
+
+    checkBudgetAlerts(req.user.householdId);
+    res.json({ updated: siblings.length });
+});
+
 router.delete('/:id', (req, res) => {
     const txn = db.prepare('SELECT * FROM transactions WHERE id = ? AND user_id = ?').get(req.params.id, req.user.householdId);
     if (!txn) return res.status(404).json({ error: 'Transacao nao encontrada' });

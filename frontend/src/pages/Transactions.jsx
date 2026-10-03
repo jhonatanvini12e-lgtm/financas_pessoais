@@ -51,6 +51,8 @@ export default function Transactions() {
     const [editError, setEditError] = useState('');
     const [recategorizing, setRecategorizing] = useState(false);
     const [recategorizeMsg, setRecategorizeMsg] = useState('');
+    const [installmentPrompt, setInstallmentPrompt] = useState(null);
+    const [applyingToInstallments, setApplyingToInstallments] = useState(false);
     const { hideValues } = usePrivacy();
 
     // Pre-seleciona o proprio usuario logado no formulario de novo lancamento
@@ -172,7 +174,7 @@ export default function Transactions() {
     const saveEdit = async (e) => {
         e.preventDefault();
         try {
-            await api.put(`/transactions/${editingTxn.id}`, {
+            const updated = await api.put(`/transactions/${editingTxn.id}`, {
                 description: editForm.description,
                 date: editForm.date,
                 amount: Number(editForm.amount),
@@ -183,8 +185,31 @@ export default function Transactions() {
             });
             closeEdit();
             load();
+            // Parcela de uma compra parcelada: pergunta se o ajuste (categoria,
+            // quem gastou, conta/cartao, descricao) deve valer pras outras
+            // parcelas identicas tambem, em vez de so nesta.
+            if (updated.installment_group && updated.installment_total > 1) {
+                setInstallmentPrompt(updated);
+            }
         } catch (err) {
             setEditError(err.message);
+        }
+    };
+
+    const applyToInstallments = async (apply) => {
+        if (!apply) {
+            setInstallmentPrompt(null);
+            return;
+        }
+        setApplyingToInstallments(true);
+        try {
+            await api.put(`/transactions/${installmentPrompt.id}/apply-to-installments`);
+            load();
+        } catch (err) {
+            setError(err.message);
+        } finally {
+            setApplyingToInstallments(false);
+            setInstallmentPrompt(null);
         }
     };
 
@@ -351,6 +376,27 @@ export default function Transactions() {
                                 <button type="submit" className="btn-primary">Salvar</button>
                             </div>
                         </form>
+                    </div>
+                </div>
+            )}
+
+            {installmentPrompt && (
+                <div className="modal-overlay">
+                    <div className="glass-panel edit-txn-panel">
+                        <h2>Aplicar as outras parcelas?</h2>
+                        <p>
+                            Esta e a parcela {installmentPrompt.installment_number}/{installmentPrompt.installment_total} de uma compra
+                            parcelada. Deseja aplicar a mesma categoria, quem gastou, conta/cartao e descricao as outras{' '}
+                            {installmentPrompt.installment_total - 1} parcela(s) identica(s)?
+                        </p>
+                        <div className="wizard-actions">
+                            <button type="button" className="btn-link" disabled={applyingToInstallments} onClick={() => applyToInstallments(false)}>
+                                Nao, so esta
+                            </button>
+                            <button type="button" className="btn-primary" disabled={applyingToInstallments} onClick={() => applyToInstallments(true)}>
+                                {applyingToInstallments ? 'Aplicando...' : 'Sim, aplicar em todas'}
+                            </button>
+                        </div>
                     </div>
                 </div>
             )}
