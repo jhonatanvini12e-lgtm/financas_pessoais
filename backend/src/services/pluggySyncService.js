@@ -166,9 +166,64 @@ function buildBillCycleAdjuster(remoteTxns, bills, closingDay) {
     };
 }
 
+// Alguns bancos/maquininhas ja mandam o contador de parcela embutido no
+// proprio texto da compra (ex: "REN*HS MOTOS 3/12", sem parenteses -- nao
+// confundir com o "(3/12)" que ESTE app acrescenta). Se nao removermos esse
+// contador antes de montar a chave de agrupamento, cada parcela tem uma
+// descricao "base" diferente da anterior (3/12, 4/12, 5/12...) e o algoritmo
+// abaixo nunca reconhece que sao a mesma compra -- cria um grupo novo (e
+// projeta parcelas futuras) a cada parcela real que chega, duplicando tudo.
+// So remove o par exato {numero da parcela}/{total} que a propria Pluggy
+// informou pra essa transacao, nunca um "n/m" generico (podia ser parte
+// legitima do nome do estabelecimento).
+function stripBankInstallmentTag(description, installmentNumber, installmentTotal) {
+    if (installmentNumber == null || installmentTotal == null) return description;
+    const pattern = new RegExp(`\\s*\\b${installmentNumber}\\s*/\\s*${installmentTotal}\\b\\s*`);
+    return description.replace(pattern, ' ').replace(/\s+/g, ' ').trim();
+}
+
+// Duas descricoes "compativeis" o bastante pra serem a mesma compra: iguais,
+// ou uma e' prefixo da outra (cobre o caso abaixo, onde o banco trunca o
+// nome do estabelecimento em pontos diferentes entre parcelas).
+function descriptionsCompatible(a, b) {
+    if (!a || !b) return a === b;
+    return a === b || a.startsWith(b) || b.startsWith(a);
+}
+
+// Agrupa (union-find) as parcelas de um mesmo bucket data+total por
+// compatibilidade de descricao -- transitivo, entao "WAL", "WALDOMIRO" e
+// "WALDOMIRO GONCALVES" caem juntos mesmo sem "WAL" e "WALDOMIRO GONCALVES"
+// serem diretamente compativeis entre si. So' separa de fato quando duas
+// compras reais e distintas coincidem no mesmo bucket (descricoes
+// incompativeis, ver chamador).
+function clusterByDescription(bucketRows) {
+    const parent = bucketRows.map((_, i) => i);
+    const find = (i) => (parent[i] === i ? i : (parent[i] = find(parent[i])));
+    for (let i = 0; i < bucketRows.length; i += 1) {
+        for (let j = i + 1; j < bucketRows.length; j += 1) {
+            if (descriptionsCompatible(normalizeForMatch(bucketRows[i].description), normalizeForMatch(bucketRows[j].description))) {
+                const ri = find(i);
+                const rj = find(j);
+                if (ri !== rj) parent[ri] = rj;
+            }
+        }
+    }
+    const clusters = new Map();
+    bucketRows.forEach((row, i) => {
+        const root = find(i);
+        if (!clusters.has(root)) clusters.set(root, []);
+        clusters.get(root).push(row);
+    });
+    return [...clusters.values()];
+}
+
 function buildDesiredRows(accountId, remoteTxns, bills, closingDay) {
     const rows = [];
     const groups = new Map();
+    // Parcelas com purchaseDate caem aqui primeiro, soh por data da compra +
+    // total (sem a descricao) -- ver motivo abaixo. So viram grupo definitivo
+    // depois da checagem de conflito, mais adiante.
+    const buckets = new Map();
     const adjustToBillCycle = buildBillCycleAdjuster(remoteTxns, bills, closingDay);
     // Parcelas que vieram sem purchaseDate (acontece com parcelas futuras)
     // nao da para agrupar pela data da compra -- entram depois no grupo do
@@ -177,7 +232,7 @@ function buildDesiredRows(accountId, remoteTxns, bills, closingDay) {
 
     for (const txn of remoteTxns) {
         const meta = txn.creditCardMetadata || {};
-        const baseDescription = (txn.description || '').trim();
+        const baseDescription = stripBankInstallmentTag((txn.description || '').trim(), meta.installmentNumber, meta.totalInstallments);
         const row = {
             fitid: FITID_PREFIX + txn.id,
             amount: round2(-txn.amount),
@@ -196,28 +251,61 @@ function buildDesiredRows(accountId, remoteTxns, bills, closingDay) {
                 continue;
             }
             row.purchaseDate = toLocalDate(meta.purchaseDate);
-            const key = [normalizeForMatch(baseDescription), row.purchaseDate, row.installmentTotal].join('|');
-            if (!groups.has(key)) groups.set(key, []);
-            groups.get(key).push(row);
+            const bucketKey = [row.purchaseDate, row.installmentTotal].join('|');
+            if (!buckets.has(bucketKey)) buckets.set(bucketKey, []);
+            buckets.get(bucketKey).push(row);
         } else {
             rows.push(row);
         }
     }
 
+    // purchaseDate+total normalmente ja identifica a compra sozinho (tem
+    // granularidade de dia e e' intrinseco a compra, ao contrario da
+    // descricao, que o banco as vezes trunca de um jeito diferente NO MEIO
+    // de uma mesma compra parcelada -- ex: "WALDOMIRO GONCALVES" nas 2
+    // primeiras parcelas e "WALDOMIRO GONCAL" dali em diante, mesma compra).
+    // So separa por descricao as parcelas de um cluster incompativel com o
+    // resto (ver clusterByDescription) -- sinal de que sao duas compras reais
+    // distintas que coincidiram na mesma data e no mesmo total de parcelas.
+    // Dentro de um cluster, se ainda sobrar numero de parcela repetido
+    // (duas compras do mesmo estabelecimento no mesmo dia/total -- caso bem
+    // mais raro), separa por descricao exata como ultimo recurso.
+    for (const [bucketKey, bucketRows] of buckets) {
+        for (const cluster of clusterByDescription(bucketRows)) {
+            const seenNumbers = new Set();
+            const hasConflict = cluster.some((r) => {
+                if (seenNumbers.has(r.installmentNumber)) return true;
+                seenNumbers.add(r.installmentNumber);
+                return false;
+            });
+            if (!hasConflict) {
+                const key = cluster.length === bucketRows.length ? bucketKey : `${bucketKey}|${normalizeForMatch(cluster[0].description)}`;
+                groups.set(key, cluster);
+                continue;
+            }
+            for (const row of cluster) {
+                const key = `${bucketKey}|${normalizeForMatch(row.description)}`;
+                if (!groups.has(key)) groups.set(key, []);
+                groups.get(key).push(row);
+            }
+        }
+    }
+
     for (const row of withoutPurchaseDate) {
-        const prefix = `${normalizeForMatch(row.description)}|`;
-        const suffix = `|${row.installmentTotal}`;
+        const rowDescription = normalizeForMatch(row.description);
         const candidates = [...groups.entries()].filter(
-            ([key, installments]) =>
-                key.startsWith(prefix) && key.endsWith(suffix) && !installments.some((i) => i.installmentNumber === row.installmentNumber)
+            ([, installments]) =>
+                installments[0].installmentTotal === row.installmentTotal &&
+                !installments.some((i) => i.installmentNumber === row.installmentNumber) &&
+                descriptionsCompatible(rowDescription, normalizeForMatch(installments[0].description))
         );
         if (candidates.length === 1) {
             const [key, installments] = candidates[0];
-            installments.push({ ...row, purchaseDate: key.split('|')[1] });
+            installments.push({ ...row, purchaseDate: key.split('|')[0] });
             continue;
         }
         row.purchaseDate = addMonths(row.date, -(row.installmentNumber - 1));
-        const key = [normalizeForMatch(row.description), row.purchaseDate, row.installmentTotal].join('|');
+        const key = [row.purchaseDate, row.installmentTotal].join('|');
         if (!groups.has(key)) groups.set(key, []);
         groups.get(key).push(row);
     }
