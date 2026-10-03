@@ -41,6 +41,13 @@ db.pragma(`legacy=4`);
 db.pragma(`key='${DB_PASSWORD}'`);
 db.pragma('foreign_keys = ON');
 
+// WAL deixa leituras e a escrita atual conviverem sem briga de lock; o
+// busy_timeout faz uma escrita que ainda assim colida esperar em vez de
+// estourar "database is locked" na hora (ex.: sync do Pluggy rodando junto
+// com alguem inspecionando o arquivo do banco por fora).
+db.pragma('journal_mode = WAL');
+db.pragma('busy_timeout = 5000');
+
 // bills.due_day nasceu NOT NULL (so existiam contas fixas). Contas avulsas
 // usam due_date no lugar, entao due_day precisa aceitar NULL -- e SQLite nao
 // permite relaxar um NOT NULL com ALTER TABLE, so reconstruindo a tabela.
