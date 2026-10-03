@@ -5,18 +5,19 @@ import db from '../db/index.js';
 import budgetParams from '../config/budgetParams.js';
 
 const BACKUP_DIR = process.env.BACKUP_DIR || './backups';
-const DB_PATH = process.env.DB_PATH || 'finance.db';
 
 fs.mkdirSync(BACKUP_DIR, { recursive: true });
 
 async function snapshotDatabaseFile(tmpPath) {
-    // Usa a API de backup do SQLite quando disponivel para uma copia consistente
-    // mesmo com o banco em uso; cai para copia direta do arquivo se indisponivel.
-    if (typeof db.backup === 'function') {
-        await db.backup(tmpPath);
-    } else {
-        fs.copyFileSync(DB_PATH, tmpPath);
-    }
+    // `db.backup()` usa a API nativa de backup pagina-a-pagina do SQLite, que
+    // falha com "incompatible source and target databases" neste banco
+    // cifrado (SQLCipher/multiple-ciphers): o arquivo de destino comeca sem a
+    // mesma config de cifra do source, e os tamanhos de pagina (reserved
+    // bytes do HMAC) nao batem. `VACUUM INTO` roda no nivel SQL, pela conexao
+    // ja autenticada com a chave, entao o arquivo gerado sai cifrado com a
+    // mesma chave/config e pode ser reaberto normalmente.
+    fs.rmSync(tmpPath, { force: true });
+    db.prepare('VACUUM INTO ?').run(tmpPath);
 }
 
 function pruneOldBackups() {
