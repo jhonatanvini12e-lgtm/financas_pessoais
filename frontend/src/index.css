@@ -1399,3 +1399,354 @@ a {
   font-size: 12px;
   color: var(--text-muted);
 }
+
+/* ---------- Dashboard (cards com anel/sparkline/barras) ---------- */
+
+.dash-card {
+  animation: fadeIn 0.4s var(--ease);
+  transition: transform 0.18s var(--ease), border-color 0.18s var(--ease), box-shadow 0.18s var(--ease);
+}
+
+.dash-card:hover {
+  transform: translateY(-3px);
+  border-color: var(--border-glass-strong);
+}
+
+.card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 14px;
+}
+
+.card-head h2 {
+  margin-bottom: 0;
+}
+
+.card-head-link {
+  font-size: 12.5px;
+  color: var(--text-muted);
+}
+
+.card-head-link:hover {
+  color: var(--accent-blue);
+}
+
+.greeting-card {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 18px;
+}
+
+.greeting-eyebrow {
+  font-size: 13.5px;
+  color: var(--text-muted);
+}
+
+.greeting-name {
+  font-size: 26px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  margin-top: 2px;
+}
+
+.greeting-sub {
+  font-size: 13.5px;
+  color: var(--text-muted);
+  margin-top: 6px;
+}
+
+.sparkline {
+  display: block;
+  animation: fadeIn 0.5s var(--ease);
+}
+
+.balance-card {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.balance-top-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.balance-delta {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--positive);
+  background: var(--positive-soft);
+  padding: 3px 9px;
+  border-radius: 999px;
+}
+
+.balance-amount {
+  font-size: 30px;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+  background: linear-gradient(135deg, var(--accent-bright), var(--accent-blue));
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  font-variant-numeric: tabular-nums;
+}
+
+.ring-card {
+  display: flex;
+  align-items: center;
+  gap: 22px;
+}
+
+.ring-progress-fill {
+  transition: stroke-dashoffset 0.8s var(--ease);
+}
+
+.ring-progress-value {
+  fill: var(--text-main);
+  font-size: 22px;
+  font-weight: 700;
+  font-family: var(--font-sans);
+}
+
+.ring-progress-sublabel {
+  fill: var(--text-muted);
+  font-size: 10.5px;
+  font-family: var(--font-sans);
+}
+
+.ring-info-title {
+  font-size: 13.5px;
+  color: var(--text-muted);
+}
+
+.ring-info-main {
+  font-size: 16px;
+  font-weight: 700;
+  margin-top: 2px;
+}
+
+.ring-info-row {
+  display: flex;
+  gap: 18px;
+  margin-top: 12px;
+}
+
+.ring-info-stat-label {
+  font-size: 11.5px;
+  color: var(--text-muted);
+}
+
+.ring-info-stat-value {
+  font-size: 14.5px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.bill-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.bill-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 9px 8px;
+  border-radius: 10px;
+  transition: background 0.15s var(--ease);
+}
+
+.bill-row:hover {
+  background: var(--hairline-fill-strong);
+}
+
+.bill-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 999px;
+  flex-shrink: 0;
+}
+
+.bill-dot--late { background: var(--negative); }
+.bill-dot--soon { background: var(--warning); }
+.bill-dot--ok { background: var(--accent-blue); }
+.bill-dot--paid { background: var(--positive); }
+
+.bill-name {
+  flex: 1;
+  font-size: 13.5px;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.bill-name--paid {
+  text-decoration: line-through;
+  color: var(--text-muted);
+}
+
+.bill-due {
+  font-size: 12px;
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+
+.bill-amount {
+  font-size: 13.5px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  flex-shrink: 0;
+}
+
+.due-badge {
+  width: 44px;
+  height: 44px;
+  flex-shrink: 0;
+  border-radius: 12px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1.1;
+}
+
+.due-badge span {
+  font-size: 9px;
+  font-weight: 600;
+}
+
+.due-badge--late { background: var(--negative-soft); color: var(--negative); }
+.due-badge--soon { background: var(--warning-soft); color: var(--warning); }
+.due-badge--ok { background: var(--accent-blue-soft); color: var(--accent-blue); }
+
+.weekly-bars {
+  display: flex;
+  align-items: flex-end;
+  gap: 14px;
+  height: 120px;
+}
+
+.weekly-bar-col {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  flex: 1;
+  height: 100%;
+  justify-content: flex-end;
+}
+
+.weekly-bar {
+  width: 100%;
+  min-height: 4px;
+  border-radius: 8px;
+  background: var(--accent-blue-soft);
+  transform-origin: bottom;
+  animation: growUp 0.6s var(--ease) both;
+}
+
+.weekly-bar--peak {
+  background: linear-gradient(180deg, var(--accent-bright), var(--accent-blue));
+}
+
+@keyframes growUp {
+  from { transform: scaleY(0); }
+  to { transform: scaleY(1); }
+}
+
+.weekly-bar-label {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.weekly-bar-label--peak {
+  color: var(--text-main);
+  font-weight: 600;
+}
+
+.shortcut-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.shortcut-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 14px 8px;
+  border-radius: 14px;
+  border: 1px solid var(--border-glass);
+  background: var(--hairline-fill);
+  color: var(--text-main);
+  transition: border-color 0.15s var(--ease), transform 0.15s var(--ease);
+}
+
+.shortcut-item:hover {
+  border-color: var(--accent);
+  transform: translateY(-2px);
+}
+
+.shortcut-label {
+  font-size: 11.5px;
+  color: var(--text-muted);
+  text-align: center;
+}
+
+.health-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+}
+
+.health-card .card-head {
+  align-self: flex-start;
+  width: 100%;
+}
+
+.health-subbars {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.health-subbar-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.health-subbar-label {
+  font-size: 11.5px;
+  color: var(--text-muted);
+  width: 68px;
+  flex-shrink: 0;
+}
+
+.health-subbar-track {
+  flex: 1;
+  height: 6px;
+  border-radius: 999px;
+  background: var(--track-bg);
+  overflow: hidden;
+}
+
+.health-subbar-fill {
+  height: 100%;
+  border-radius: 999px;
+  transform-origin: left;
+  animation: growIn 0.8s var(--ease) both;
+}
