@@ -202,6 +202,7 @@ a {
   position: absolute;
   top: 16px;
   right: 16px;
+  z-index: 5;
 }
 
 .glass-panel h2 {
@@ -1749,4 +1750,389 @@ a {
   border-radius: 999px;
   transform-origin: left;
   animation: growIn 0.8s var(--ease) both;
+}
+
+/* ---------- Login: jornada interativa (toque no bonequinho -> uma vida
+   inteira sobe num grafico ondulado, estacoes passam, ele envelhece, chega
+   ao topo e o card de acesso aparece). Fundo sempre escuro/atmosferico,
+   independente do tema claro/escuro do resto do app -- e' uma cena, nao uma
+   pagina comum. Duracao total: 4.8s (ver loginClimb); tudo que usa
+   keyframes percentuais escala junto so mudando essa duracao. */
+.login-scene {
+  position: relative;
+  width: 100%;
+  min-height: 100vh;
+  overflow: hidden;
+  background: linear-gradient(180deg, #05070d 0%, #070b14 55%, #0a1020 100%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.login-star {
+  position: absolute;
+  border-radius: 999px;
+  background: #cbd5e1;
+  animation: loginTwinkle 3.6s ease-in-out infinite;
+  z-index: 1;
+}
+@keyframes loginTwinkle {
+  0%, 100% { opacity: 0.12; }
+  50% { opacity: 0.8; }
+}
+
+.login-scene button:focus-visible {
+  outline: 2px solid rgba(110,231,183,0.6);
+  outline-offset: 3px;
+  border-radius: 10px;
+}
+
+.login-season-caption {
+  position: absolute;
+  top: 28px;
+  left: 32px;
+  z-index: 3;
+}
+.login-season-caption .login-tag {
+  position: absolute;
+  left: 0;
+  top: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  white-space: nowrap;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: #94a3b8;
+  opacity: 0;
+}
+.login-scene--on .login-tag-spring { animation: loginCapSpring 4.8s linear forwards; }
+.login-scene--on .login-tag-summer { animation: loginCapSummer 4.8s linear forwards; }
+.login-scene--on .login-tag-autumn { animation: loginCapAutumn 4.8s linear forwards; }
+.login-scene--on .login-tag-winter { animation: loginCapWinter 4.8s linear forwards; }
+@keyframes loginCapSpring { 0%{opacity:1} 32%{opacity:1} 36%{opacity:0} 100%{opacity:0} }
+@keyframes loginCapSummer { 0%,32%{opacity:0} 36%{opacity:1} 60%{opacity:1} 64%{opacity:0} 100%{opacity:0} }
+@keyframes loginCapAutumn { 0%,60%{opacity:0} 64%{opacity:1} 82%{opacity:1} 86%{opacity:0} 100%{opacity:0} }
+@keyframes loginCapWinter { 0%,82%{opacity:0} 86%{opacity:1} 100%{opacity:1} }
+
+.login-season-layer {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  opacity: 0;
+  pointer-events: none;
+}
+.login-scene--on .login-layer-spring { animation: loginCapSpring 4.8s linear forwards; }
+.login-scene--on .login-layer-summer { animation: loginCapSummer 4.8s linear forwards; }
+.login-scene--on .login-layer-autumn { animation: loginCapAutumn 4.8s linear forwards; }
+.login-scene--on .login-layer-winter { animation: loginCapWinter 4.8s linear forwards; }
+
+.login-blossom {
+  position: absolute;
+  bottom: 3%;
+  width: 11px;
+  height: 11px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 35% 30%, #fbcfe8, #f472b6 70%);
+  box-shadow: 0 0 8px 1px rgba(244,114,182,0.4);
+  transform: scale(0);
+  opacity: 0;
+}
+.login-scene--on .login-blossom { animation: loginBloom 1.8s ease forwards; }
+@keyframes loginBloom { 0% { transform: scale(0); opacity: 0; } 100% { transform: scale(1); opacity: 0.95; } }
+
+.login-summer-glow {
+  position: absolute;
+  left: 50%;
+  top: 38%;
+  width: 70vw;
+  height: 70vw;
+  max-width: 820px;
+  max-height: 820px;
+  margin-left: -35vw;
+  margin-top: -35vw;
+  border-radius: 999px;
+  background: radial-gradient(circle, rgba(251,191,36,0.16) 0%, rgba(251,191,36,0.05) 45%, transparent 72%);
+  animation: loginSummerPulse 3.4s ease-in-out infinite;
+}
+@keyframes loginSummerPulse {
+  0%, 100% { transform: scale(0.94); opacity: 0.8; }
+  50% { transform: scale(1.04); opacity: 1; }
+}
+.login-heat-line {
+  position: absolute;
+  bottom: 6%;
+  width: 2px;
+  height: 70px;
+  background: linear-gradient(180deg, transparent, rgba(251,191,36,0.35), transparent);
+  transform-origin: bottom center;
+  animation: loginShimmer 2.6s ease-in-out infinite;
+}
+@keyframes loginShimmer {
+  0%, 100% { transform: scaleY(0.7) skewX(0deg); opacity: 0.5; }
+  50% { transform: scaleY(1.15) skewX(4deg); opacity: 0.9; }
+}
+
+.login-leaf {
+  position: absolute;
+  top: -8%;
+  width: 11px;
+  height: 11px;
+  border-radius: 70% 0 70% 0;
+  opacity: 0.9;
+  animation-name: loginLeafFall;
+  animation-timing-function: linear;
+  animation-iteration-count: infinite;
+}
+@keyframes loginLeafFall {
+  0%   { transform: translate(0, 0) rotate(0deg); }
+  50%  { transform: translate(16px, 58vh) rotate(180deg); }
+  100% { transform: translate(-12px, 120vh) rotate(360deg); }
+}
+
+.login-snow {
+  position: absolute;
+  top: -6%;
+  border-radius: 999px;
+  background: #f8fafc;
+  opacity: 0.85;
+  animation-name: loginSnowFall;
+  animation-timing-function: linear;
+  animation-iteration-count: infinite;
+}
+@keyframes loginSnowFall {
+  0%   { transform: translate(0, 0); }
+  50%  { transform: translate(10px, 58vh); }
+  100% { transform: translate(-8px, 120vh); }
+}
+
+.login-chart-track,
+.login-chart-line {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 2;
+  pointer-events: none;
+}
+.login-chart-track .login-grid-line {
+  fill: none;
+  stroke: rgba(148,163,184,0.1);
+  stroke-width: 0.3;
+  stroke-dasharray: 1 1.6;
+}
+.login-chart-track .login-guide-line {
+  fill: none;
+  stroke: rgba(148,163,184,0.16);
+  stroke-width: 0.5;
+  stroke-dasharray: 1.2 1.8;
+}
+.login-chart-line path {
+  fill: none;
+  stroke: url(#loginClimbGradient);
+  stroke-width: 0.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  filter: drop-shadow(0 0 3px rgba(16,185,129,0.55));
+  stroke-dasharray: 166;
+  stroke-dashoffset: 166;
+  transition: stroke-dashoffset 4.8s cubic-bezier(0.4, 0, 0.2, 1);
+}
+.login-scene--on .login-chart-line path {
+  stroke-dashoffset: 0;
+}
+
+.login-chart-dot {
+  position: absolute;
+  width: 6px;
+  height: 6px;
+  margin: -3px;
+  border-radius: 999px;
+  background: #0a0f1d;
+  border: 1.5px solid #475569;
+  transition: background 0.3s ease, border-color 0.3s ease, box-shadow 0.3s ease;
+  z-index: 2;
+}
+.login-scene--on .login-chart-dot {
+  background: #10b981;
+  border-color: #6ee7b7;
+  box-shadow: 0 0 6px 1px rgba(16,185,129,0.6);
+}
+
+.login-figure-rig {
+  position: absolute;
+  left: 8%;
+  top: 95%;
+  width: 30px;
+  height: 40px;
+  margin: -32px 0 0 -15px;
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  z-index: 3;
+  animation: loginFigureBob 1.8s ease-in-out infinite;
+}
+.login-scene--on .login-figure-rig {
+  animation: loginClimb 4.8s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+}
+@keyframes loginFigureBob {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-4px); }
+}
+@keyframes loginClimb {
+  0%     { left: 8%;  top: 95%; }
+  3.1%   { left: 12%; top: 92%; }
+  5.8%   { left: 16%; top: 94%; }
+  10.7%  { left: 20%; top: 87%; }
+  13.8%  { left: 24%; top: 90%; }
+  19.3%  { left: 28%; top: 82%; }
+  22.4%  { left: 32%; top: 85%; }
+  28.4%  { left: 36%; top: 76%; }
+  31.4%  { left: 40%; top: 79%; }
+  38.6%  { left: 44%; top: 68%; }
+  41.7%  { left: 48%; top: 71%; }
+  48.8%  { left: 52%; top: 60%; }
+  51.9%  { left: 56%; top: 63%; }
+  60.2%  { left: 60%; top: 50%; }
+  63.3%  { left: 64%; top: 53%; }
+  71.6%  { left: 68%; top: 40%; }
+  74.4%  { left: 72%; top: 42%; }
+  83.3%  { left: 76%; top: 28%; }
+  87.7%  { left: 80%; top: 22%; }
+  92.1%  { left: 84%; top: 16%; }
+  96.5%  { left: 88%; top: 10%; }
+  100%   { left: 92%; top: 6%; }
+}
+
+.login-figure-halo {
+  position: absolute;
+  inset: -8px;
+  border-radius: 999px;
+  background: radial-gradient(circle, rgba(241,245,249,0.35), transparent 70%);
+}
+.login-scene--on .login-figure-halo { animation: loginHaloWarm 4.8s linear forwards; }
+@keyframes loginHaloWarm {
+  0%, 94%  { background: radial-gradient(circle, rgba(241,245,249,0.35), transparent 70%); }
+  100% { background: radial-gradient(circle, rgba(224,171,74,0.7), transparent 72%); }
+}
+
+.login-figure-rig svg { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; }
+.login-fig-young { opacity: 1; }
+
+.login-scene--on .login-fig-young      { animation: loginFigYoung 4.8s linear forwards; }
+.login-scene--on .login-fig-adult      { animation: loginFigAdult 4.8s linear forwards; }
+.login-scene--on .login-fig-middle     { animation: loginFigMiddle 4.8s linear forwards; }
+.login-scene--on .login-fig-elderly    { animation: loginFigElderly 4.8s linear forwards; }
+.login-scene--on .login-fig-triumphant { animation: loginFigTriumphant 4.8s linear forwards; }
+
+@keyframes loginFigYoung      { 0%{opacity:1} 32%{opacity:1} 36%{opacity:0} 100%{opacity:0} }
+@keyframes loginFigAdult      { 0%,32%{opacity:0} 36%{opacity:1} 60%{opacity:1} 64%{opacity:0} 100%{opacity:0} }
+@keyframes loginFigMiddle     { 0%,60%{opacity:0} 64%{opacity:1} 82%{opacity:1} 86%{opacity:0} 100%{opacity:0} }
+@keyframes loginFigElderly    { 0%,82%{opacity:0} 86%{opacity:1} 96%{opacity:1} 99%{opacity:0} 100%{opacity:0} }
+@keyframes loginFigTriumphant { 0%,96%{opacity:0} 99%{opacity:1} 100%{opacity:1} }
+
+.login-climb-hint {
+  position: absolute;
+  left: 8%;
+  top: 95%;
+  transform: translate(calc(-50% + 15px), 26px);
+  width: 190px;
+  text-align: left;
+  font-size: 12px;
+  font-weight: 500;
+  color: #94a3b8;
+  z-index: 3;
+  transition: opacity 0.35s ease;
+}
+.login-scene--on .login-climb-hint { opacity: 0; pointer-events: none; }
+.login-climb-hint-arrow { display: inline-block; margin-left: 4px; animation: loginBounceUp 1.6s ease-in-out infinite; }
+@keyframes loginBounceUp { 0%, 100% { transform: translateY(0); opacity: 0.5; } 50% { transform: translateY(-5px); opacity: 1; } }
+
+.login-skip {
+  position: absolute;
+  bottom: 16px;
+  right: 20px;
+  z-index: 5;
+  background: none;
+  border: none;
+  color: #5f6b7e;
+  font-size: 12px;
+  font-family: inherit;
+  cursor: pointer;
+  padding: 6px 8px;
+  transition: color 0.15s ease;
+}
+.login-skip:hover { color: #94a3b8; }
+
+.login-peak-burst {
+  position: absolute;
+  left: 92%;
+  top: 6%;
+  width: 1300px;
+  height: 1300px;
+  margin: -650px 0 0 -650px;
+  border-radius: 999px;
+  background: radial-gradient(circle, rgba(224,171,74,0.32) 0%, rgba(224,171,74,0.1) 30%, rgba(16,185,129,0.06) 50%, transparent 70%);
+  transform: scale(0.04);
+  opacity: 0;
+  transition: transform 1.8s cubic-bezier(0.16,1,0.3,1), opacity 1s ease;
+  pointer-events: none;
+  z-index: 2;
+}
+.login-scene--on .login-peak-burst { transform: scale(1); opacity: 1; transition-delay: 4.6s; }
+
+.login-conquest-label {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  color: #fff3d6;
+  text-shadow: 0 0 18px rgba(224,171,74,0.8);
+  opacity: 0;
+  transition: opacity 0.6s ease;
+  z-index: 3;
+}
+.login-scene--on .login-conquest-label { opacity: 1; transition-delay: 4.6s; }
+
+.login-card {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 100%;
+  max-width: 380px;
+  margin: 0 16px;
+  padding: 38px 36px;
+  text-align: center;
+  background: rgba(19, 25, 41, 0.72);
+  backdrop-filter: blur(22px);
+  -webkit-backdrop-filter: blur(22px);
+  border: 1px solid rgba(148,163,184,0.16);
+  border-radius: 22px;
+  box-shadow: 0 20px 60px -15px rgba(0,0,0,0.6);
+  opacity: 0;
+  transform: translate(-50%, -50%) scale(0.96);
+  pointer-events: none;
+  transition: opacity 0.9s cubic-bezier(0.16,1,0.3,1), transform 0.9s cubic-bezier(0.16,1,0.3,1);
+  z-index: 4;
+}
+.login-scene--on .login-card {
+  opacity: 1;
+  transform: translate(-50%, -50%) scale(1);
+  pointer-events: auto;
+  transition-delay: 5.5s;
+}
+
+.login-card .logo-lockup { justify-content: center; margin-bottom: 22px; }
+.login-card h2 { margin: 0 0 8px; font-size: 22px; font-weight: 700; color: #f1f5f9; letter-spacing: -0.01em; }
+.login-card p { margin: 0 0 26px; font-size: 13.5px; line-height: 1.5; color: #8b96a8; }
+
+.login-scene-footer {
+  position: absolute; bottom: 14px; left: 0; right: 0; text-align: center;
+  font-size: 11px; color: #4b5666; z-index: 3;
 }
