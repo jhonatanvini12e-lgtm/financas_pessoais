@@ -1,4 +1,10 @@
-const CACHE_NAME = 'financas-shell-v1';
+// __BUILD_ID__ e substituido no build (scripts/stamp-sw.js) por um valor
+// unico a cada deploy, pra forcar o navegador a detectar o sw.js como
+// mudado, instalar a nova versao e limpar o cache antigo no activate --
+// sem isso o CACHE_NAME ficava fixo entre deploys e o celular continuava
+// servindo a versao antiga indefinidamente quando a rede (Tailscale via
+// DERP, por ex.) demorava ou falhava e caia no fallback de cache.
+const CACHE_NAME = 'financas-shell-__BUILD_ID__';
 const APP_SHELL = ['/', '/manifest.webmanifest', '/favicon.svg'];
 
 self.addEventListener('install', (event) => {

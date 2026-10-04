@@ -31,6 +31,11 @@ export default {
     // Manter igual a IDLE_TIMEOUT_MS em frontend/src/hooks/useIdleTimer.js.
     inactivityTimeoutMinutes: 120,
     twoFactorCodeExpiryMinutes: 60,
+    // Dispositivo com biometria (WebAuthn) cadastrada pula o codigo por
+    // e-mail no login -- mas so por ate N dias desde a ultima vez que o
+    // e-mail foi de fato verificado nele; passado isso, volta a pedir o
+    // codigo por e-mail uma vez (reinicia a janela).
+    webauthnEmailRecheckDays: 15,
 
     // Backup.
     backupRetentionCount: 2,

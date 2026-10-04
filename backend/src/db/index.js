@@ -119,6 +119,15 @@ const migrateColumns = () => {
     if (!existingLinkColumns.has('pluggy_item_id')) {
         db.exec('ALTER TABLE pluggy_card_links ADD COLUMN pluggy_item_id TEXT');
     }
+
+    // Dispositivos conhecidos antes da janela de 15 dias do 2FA por biometria
+    // nascem com last_email_verified_at NULL -- needsEmailRecheck trata NULL
+    // como "nunca verificado", entao o proximo login com biometria ainda pede
+    // o e-mail uma vez antes de comecar a contar os 15 dias.
+    const existingDeviceColumns = new Set(db.prepare('PRAGMA table_info(known_devices)').all().map((c) => c.name));
+    if (!existingDeviceColumns.has('last_email_verified_at')) {
+        db.exec('ALTER TABLE known_devices ADD COLUMN last_email_verified_at DATETIME');
+    }
 };
 
 // Recurso de Open Finance removido (pessoa fisica nao consegue se

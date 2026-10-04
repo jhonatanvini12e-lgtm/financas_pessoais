@@ -8,6 +8,8 @@ import {
     deviceFingerprint,
     issueTwoFactorCode,
     hasWebauthnCredential,
+    needsEmailRecheck,
+    markEmailVerified,
     twoFactorStore,
     completeLogin,
 } from '../services/deviceAuth.js';
@@ -43,10 +45,12 @@ router.post('/login', async (req, res) => {
 
     // Sempre gera o codigo (fica de reserva), mas so manda por e-mail se este
     // dispositivo nao tiver biometria (WebAuthn) registrada -- nesse caso o
-    // front pede a digital direto, sem depender do e-mail.
+    // front pede a digital direto, sem depender do e-mail. Mesmo com
+    // biometria, o e-mail volta a ser exigido a cada webauthnEmailRecheckDays
+    // (needsEmailRecheck), pra nao deixar o dispositivo dispensado dele pra sempre.
     const code = issueTwoFactorCode(user.id, fingerprint);
 
-    if (hasWebauthnCredential(user.id, fingerprint)) {
+    if (hasWebauthnCredential(user.id, fingerprint) && !needsEmailRecheck(user.id, fingerprint)) {
         return res.json({ userId: user.id, newDevice: false, method: 'webauthn' });
     }
 
@@ -117,6 +121,7 @@ router.post('/verify-2fa', (req, res) => {
     twoFactorStore.delete(userId);
 
     const fingerprint = store.fingerprint || deviceFingerprint(req);
+    markEmailVerified(userId, fingerprint);
     completeLogin(userId, fingerprint, res);
     res.json({ message: 'Autenticado com sucesso' });
 });

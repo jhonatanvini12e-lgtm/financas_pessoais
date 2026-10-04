@@ -259,6 +259,8 @@ export default function Login() {
                 ))}
             </div>
 
+            <div className="login-quote">O inverno nunca falha em se tornar primavera.</div>
+
             <div className="login-peak-burst" />
             <div className="login-conquest-label">Uma vida de conquistas financeiras.</div>
 

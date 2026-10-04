@@ -8,12 +8,17 @@ CREATE TABLE IF NOT EXISTS users (
     household_id INTEGER REFERENCES users(id)
 );
 
+-- last_email_verified_at marca a ultima vez que o codigo por e-mail foi
+-- verificado com sucesso neste dispositivo -- usado pelo login com
+-- biometria (webauthn_credentials) para so pedir o e-mail de novo depois de
+-- webauthnEmailRecheckDays (ver budgetParams.js), em vez de a cada login.
 CREATE TABLE IF NOT EXISTS known_devices (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     user_id INTEGER NOT NULL,
     fingerprint TEXT NOT NULL,
     label TEXT,
     last_seen DATETIME DEFAULT CURRENT_TIMESTAMP,
+    last_email_verified_at DATETIME,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY(user_id) REFERENCES users(id),
     UNIQUE(user_id, fingerprint)
