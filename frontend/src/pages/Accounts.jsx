@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { api } from '../api/client.js';
 import { usePolling } from '../hooks/usePolling.js';
 import HideValuesToggle from '../components/HideValuesToggle.jsx';
@@ -7,12 +8,26 @@ import { formatCurrency } from '../utils/currency.js';
 import { PROVIDERS } from '../constants/providers.js';
 import OpenFinanceCards from '../components/OpenFinanceCards.jsx';
 import OpenFinanceAccounts from '../components/OpenFinanceAccounts.jsx';
+import ConnectionsMonitor from '../components/ConnectionsMonitor.jsx';
+
+const TABS = [
+    { value: 'contas-cartoes', label: 'Contas e Cartoes' },
+    { value: 'conexoes', label: 'Conexoes Open Finance' },
+];
 
 export default function Accounts() {
+    const [searchParams, setSearchParams] = useSearchParams();
+    const initialTab = TABS.some((t) => t.value === searchParams.get('tab')) ? searchParams.get('tab') : TABS[0].value;
+    const [tab, setTab] = useState(initialTab);
     const [accounts, setAccounts] = useState([]);
     const [cards, setCards] = useState([]);
     const [error, setError] = useState('');
     const { hideValues } = usePrivacy();
+
+    const changeTab = (value) => {
+        setTab(value);
+        setSearchParams(value === TABS[0].value ? {} : { tab: value });
+    };
 
     const [accountForm, setAccountForm] = useState({ bank_name: '', provider: 'nubank', balance: '' });
     const [cardForm, setCardForm] = useState({ card_name: '', credit_limit: '', closing_day: '', due_day: '', provider: 'nubank' });
@@ -69,9 +84,22 @@ export default function Accounts() {
     return (
         <div className="page">
             <div className="page-header-row">
-                <h1>Contas e Cartoes</h1>
+                <h1>Contas e Conexoes</h1>
                 <HideValuesToggle />
             </div>
+
+            <div className="segmented-tabs">
+                {TABS.map((t) => (
+                    <button key={t.value} className={tab === t.value ? 'active' : ''} onClick={() => changeTab(t.value)}>
+                        {t.label}
+                    </button>
+                ))}
+            </div>
+
+            {tab === 'conexoes' ? (
+                <ConnectionsMonitor />
+            ) : (
+                <>
             {error && <div className="error-msg">{error}</div>}
 
             <div className="two-col">
@@ -147,6 +175,8 @@ export default function Accounts() {
 
             <OpenFinanceAccounts onChange={load} />
             <OpenFinanceCards onChange={load} />
+                </>
+            )}
         </div>
     );
 }

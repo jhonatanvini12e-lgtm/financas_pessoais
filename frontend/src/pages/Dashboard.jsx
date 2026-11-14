@@ -23,7 +23,7 @@ const SHORTCUTS = [
     { to: '/analytics', label: 'Relatórios', icon: <Icon><path d="M4 20V10M12 20V4M20 20v-7" /></Icon> },
     { to: '/caixinhas-investimentos', label: 'Caixinhas', icon: <Icon><path d="M3 17l6-7 4 4 7-9" /><path d="M14 5h6v6" /></Icon> },
     { to: '/categories', label: 'Categorias', icon: <Icon><path d="M20.59 13.41 11 3.83A2 2 0 0 0 9.59 3.17L4 3a1 1 0 0 0-1 1l.17 5.59a2 2 0 0 0 .66 1.41l9.58 9.59a2 2 0 0 0 2.83 0l4.35-4.35a2 2 0 0 0 0-2.83Z" /><circle cx="7.5" cy="7.5" r="1.2" /></Icon> },
-    { to: '/connections', label: 'Sincronizar', icon: <Icon><path d="M7 7h7a4 4 0 0 1 0 8H8" /><path d="m10 4-3 3 3 3" /><path d="m14 20 3-3-3-3" /></Icon> },
+    { to: '/accounts?tab=conexoes', label: 'Sincronizar', icon: <Icon><path d="M7 7h7a4 4 0 0 1 0 8H8" /><path d="m10 4-3 3 3 3" /><path d="m14 20 3-3-3-3" /></Icon> },
 ];
 
 const MONTH_ABBR = ['JAN', 'FEV', 'MAR', 'ABR', 'MAI', 'JUN', 'JUL', 'AGO', 'SET', 'OUT', 'NOV', 'DEZ'];

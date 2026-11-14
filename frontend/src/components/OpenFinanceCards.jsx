@@ -195,7 +195,7 @@ export default function OpenFinanceCards({ onChange }) {
             <h2>Cartoes via Open Finance</h2>
             <p className="muted">
                 Conectados pelo Meu Pluggy. Lancamentos, parcelas e faturas sao sincronizados automaticamente a cada 6 horas.{' '}
-                <Link to="/connections">Ver monitoramento das conexoes</Link>.
+                <Link to="/accounts?tab=conexoes">Ver monitoramento das conexoes</Link>.
             </p>
             {error && <div className="error-msg">{error}</div>}
             {message && <p className="budget-alert-ok">{message}</p>}

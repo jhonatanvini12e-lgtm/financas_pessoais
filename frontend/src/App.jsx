@@ -19,7 +19,6 @@ import Intelligence from './pages/Intelligence.jsx';
 import Analytics from './pages/Analytics.jsx';
 import Alerts from './pages/Alerts.jsx';
 import Settings from './pages/Settings.jsx';
-import ConnectionsMonitor from './pages/ConnectionsMonitor.jsx';
 
 function App() {
     const { user, loadingUser } = useAuth();
@@ -48,7 +47,7 @@ function App() {
                 <Route path="/turning-point" element={<TurningPoint />} />
                 <Route path="/intelligence" element={<Intelligence />} />
                 <Route path="/analytics" element={<Analytics />} />
-                <Route path="/connections" element={<ConnectionsMonitor />} />
+                <Route path="/connections" element={<Navigate to="/accounts?tab=conexoes" replace />} />
                 <Route path="/alerts" element={<Alerts />} />
                 <Route path="/settings" element={<Settings />} />
                 <Route path="*" element={<Navigate to="/" replace />} />

@@ -97,15 +97,12 @@ export default function ConnectionsMonitor() {
 
     if (data && !data.configured) {
         return (
-            <div className="page">
-                <h1>Monitoramento de Conexoes</h1>
-                <section className="card">
-                    <p className="muted">
-                        A integracao com Open Finance (Pluggy) nao esta configurada no servidor. Defina PLUGGY_CLIENT_ID,
-                        PLUGGY_CLIENT_SECRET e PLUGGY_ITEM_ID no .env do backend (ver .env.example).
-                    </p>
-                </section>
-            </div>
+            <section className="card">
+                <p className="muted">
+                    A integracao com Open Finance (Pluggy) nao esta configurada no servidor. Defina PLUGGY_CLIENT_ID,
+                    PLUGGY_CLIENT_SECRET e PLUGGY_ITEM_ID no .env do backend (ver .env.example).
+                </p>
+            </section>
         );
     }
 
@@ -128,9 +125,9 @@ export default function ConnectionsMonitor() {
         .sort()[0];
 
     return (
-        <div className="page">
+        <div>
             <div className="page-header-row">
-                <h1>Monitoramento de Conexoes</h1>
+                <h2>Monitoramento de Conexoes</h2>
                 <button className="btn-primary" onClick={checkNow} disabled={checking}>
                     {checking ? 'Verificando...' : 'Verificar agora'}
                 </button>

@@ -168,7 +168,7 @@ export default function OpenFinanceAccounts({ onChange }) {
             <h2>Contas bancarias via Open Finance</h2>
             <p className="muted">
                 Conectadas pelo Meu Pluggy. Lancamentos (entradas e saidas) sao sincronizados automaticamente a cada 6 horas.{' '}
-                <Link to="/connections">Ver monitoramento das conexoes</Link>.
+                <Link to="/accounts?tab=conexoes">Ver monitoramento das conexoes</Link>.
             </p>
             {error && <div className="error-msg">{error}</div>}
             {message && <p className="budget-alert-ok">{message}</p>}

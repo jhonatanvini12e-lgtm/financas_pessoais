@@ -43,13 +43,8 @@ const NAV_ITEMS = [
         ),
     },
     {
-        to: '/accounts', label: 'Contas e Cartoes', icon: (
+        to: '/accounts', label: 'Contas e Conexoes', icon: (
             <Icon><rect x="2.5" y="5.5" width="19" height="13" rx="2.5" /><path d="M2.5 10h19" /></Icon>
-        ),
-    },
-    {
-        to: '/connections', label: 'Conexoes Open Finance', icon: (
-            <Icon><path d="M7 7h7a4 4 0 0 1 0 8H8" /><path d="m10 4-3 3 3 3" /><path d="m14 20 3-3-3-3" /></Icon>
         ),
     },
     {
