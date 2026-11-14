@@ -927,8 +927,40 @@ a {
   background: var(--hairline-fill-strong);
 }
 
-.alert-item > span:first-child {
+.alert-item .alert-message {
   flex: 1 1 auto;
+}
+
+.alert-item input[type="checkbox"],
+.alerts-toolbar input[type="checkbox"] {
+  accent-color: var(--accent-blue);
+  cursor: pointer;
+}
+
+.alerts-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+  font-size: 13px;
+}
+
+.alerts-toolbar label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+}
+
+.alerts-toolbar .btn-danger-link {
+  color: var(--negative);
+}
+
+.alerts-toolbar .btn-danger-link:disabled {
+  color: var(--text-muted);
+  cursor: default;
+  text-decoration: none;
 }
 
 .alert-warning { border-left: 3px solid var(--warning); }

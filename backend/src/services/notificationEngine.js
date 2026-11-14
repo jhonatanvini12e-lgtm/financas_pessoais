@@ -31,6 +31,12 @@ export function deleteAlert(userId, alertId) {
     return result.changes > 0;
 }
 
+export function deleteAlerts(userId, alertIds) {
+    const stmt = db.prepare('DELETE FROM alerts WHERE id = ? AND user_id = ?');
+    const run = db.transaction((ids) => ids.reduce((total, id) => total + stmt.run(id, userId).changes, 0));
+    return run(alertIds);
+}
+
 // Evita spam: nao repete o mesmo tipo de alerta para o mesmo "assunto" no mesmo dia.
 export function alreadyAlertedToday(userId, type, messageContains) {
     const row = db

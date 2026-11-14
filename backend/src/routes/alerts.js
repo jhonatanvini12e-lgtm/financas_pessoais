@@ -1,5 +1,5 @@
 import express from 'express';
-import { listAlerts, markAlertRead, deleteAlert } from '../services/notificationEngine.js';
+import { listAlerts, markAlertRead, deleteAlert, deleteAlerts } from '../services/notificationEngine.js';
 import { getPreferences, upsertPreferences } from '../services/alertPreferencesService.js';
 
 const router = express.Router();
@@ -21,6 +21,13 @@ router.put('/preferences', (req, res) => {
 router.patch('/:id/read', (req, res) => {
     markAlertRead(req.user.householdId, req.params.id);
     res.json({ ok: true });
+});
+
+router.post('/bulk-delete', (req, res) => {
+    const { ids } = req.body || {};
+    if (!Array.isArray(ids) || ids.length === 0) return res.status(400).json({ error: 'Nenhum alerta selecionado' });
+    const deleted = deleteAlerts(req.user.householdId, ids);
+    res.json({ ok: true, deleted });
 });
 
 router.delete('/:id', (req, res) => {
