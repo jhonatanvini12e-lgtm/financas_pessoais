@@ -20,6 +20,7 @@ import {
     importStatementRateLimiter,
     backupsRateLimiter,
     pluggyRateLimiter,
+    aiAssistantRateLimiter,
 } from './middleware/rateLimiter.js';
 import { csrfProtection } from './middleware/csrf.js';
 import { startCronJobs } from './cron/index.js';
@@ -40,6 +41,7 @@ import backupsRoutes from './routes/backups.js';
 import dashboardRoutes from './routes/dashboard.js';
 import pluggyRoutes from './routes/pluggy.js';
 import analyticsRoutes from './routes/analytics.js';
+import aiAssistantRoutes from './routes/aiAssistant.js';
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -94,6 +96,7 @@ app.use('/api/backups', authMiddleware, backupsRoutes);
 app.use('/api/dashboard', authMiddleware, dashboardRoutes);
 app.use('/api/analytics', authMiddleware, analyticsRoutes);
 app.use('/api/pluggy', authMiddleware, pluggyRateLimiter, pluggyRoutes);
+app.use('/api/ai-assistant', authMiddleware, aiAssistantRateLimiter, aiAssistantRoutes);
 
 // Handler de erro global: precisa vir depois de todas as rotas. Sem ele, uma
 // excecao/rejeicao propagada por `express-async-errors` cairia no handler

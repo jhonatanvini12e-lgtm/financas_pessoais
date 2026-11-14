@@ -11,6 +11,7 @@ import Budget from './pages/Budget.jsx';
 import NotasFaturas from './pages/NotasFaturas.jsx';
 import CaixinhasInvestimentos from './pages/CaixinhasInvestimentos.jsx';
 import Analytics from './pages/Analytics.jsx';
+import AIAssistant from './pages/AIAssistant.jsx';
 import Alerts from './pages/Alerts.jsx';
 import Settings from './pages/Settings.jsx';
 
@@ -42,6 +43,7 @@ function App() {
                 <Route path="/intelligence" element={<Navigate to="/analytics?tab=inteligencia" replace />} />
                 <Route path="/analytics" element={<Analytics />} />
                 <Route path="/connections" element={<Navigate to="/accounts?tab=conexoes" replace />} />
+                <Route path="/ai-assistant" element={<AIAssistant />} />
                 <Route path="/alerts" element={<Alerts />} />
                 <Route path="/settings" element={<Settings />} />
                 <Route path="*" element={<Navigate to="/" replace />} />

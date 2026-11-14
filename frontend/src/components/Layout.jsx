@@ -23,6 +23,11 @@ const NAV_ITEMS = [
         ),
     },
     {
+        to: '/ai-assistant', label: 'Assistente de IA', icon: (
+            <Icon><path d="M12 2v3M12 19v3M4.2 4.2l2.1 2.1M17.7 17.7l2.1 2.1M2 12h3M19 12h3M4.2 19.8l2.1-2.1M17.7 6.3l2.1-2.1" /><circle cx="12" cy="12" r="4" /></Icon>
+        ),
+    },
+    {
         to: '/transactions', label: 'Lancamentos e Lancamento Rapido', icon: (
             <Icon><path d="M6 3h9l3 3v15H6z" /><path d="M9 9h6M9 13h6M9 17h3" /></Icon>
         ),

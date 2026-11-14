@@ -74,3 +74,14 @@ export const pluggyRateLimiter = rateLimit({
     legacyHeaders: false,
     message: { error: 'Muitas sincronizacoes com o banco. Tente novamente em alguns minutos.' },
 });
+
+// So limita o envio de mensagem (POST): cada uma consome cota do free tier
+// do Gemini/Groq. Ler o historico ou limpar a conversa nao chama a IA.
+export const aiAssistantRateLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000,
+    max: 20,
+    skip: (req) => req.method !== 'POST',
+    standardHeaders: true,
+    legacyHeaders: false,
+    message: { error: 'Muitas mensagens para o assistente de IA. Tente novamente em alguns minutos.' },
+});

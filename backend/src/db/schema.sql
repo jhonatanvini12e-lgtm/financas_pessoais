@@ -429,3 +429,18 @@ CREATE TABLE IF NOT EXISTS alert_preferences (
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY(user_id) REFERENCES users(id)
 );
+
+-- Historico do chat com o assistente de IA financeiro. user_id e' o household
+-- (igual a accounts/transactions): a conversa e' compartilhada por todos os
+-- membros. created_by identifica quem mandou cada mensagem do usuario (null
+-- nas respostas do assistente).
+CREATE TABLE IF NOT EXISTS ai_chat_messages (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL,
+    created_by INTEGER,
+    role TEXT NOT NULL CHECK(role IN ('user', 'assistant')),
+    content TEXT NOT NULL,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY(user_id) REFERENCES users(id),
+    FOREIGN KEY(created_by) REFERENCES users(id)
+);
