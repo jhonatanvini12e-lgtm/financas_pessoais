@@ -6,7 +6,6 @@ import Dashboard from './pages/Dashboard.jsx';
 import Accounts from './pages/Accounts.jsx';
 import OfxImportWizard from './pages/OfxImportWizard.jsx';
 import Transactions from './pages/Transactions.jsx';
-import QuickAdd from './pages/QuickAdd.jsx';
 import Categories from './pages/Categories.jsx';
 import Budget from './pages/Budget.jsx';
 import NotasFaturas from './pages/NotasFaturas.jsx';
@@ -25,7 +24,7 @@ function App() {
         <Routes>
             <Route element={<Layout />}>
                 <Route path="/" element={<Dashboard />} />
-                <Route path="/quick-add" element={<QuickAdd />} />
+                <Route path="/quick-add" element={<Navigate to="/transactions?tab=rapido" replace />} />
                 <Route path="/accounts" element={<Accounts />} />
                 <Route path="/invoice-export" element={<Navigate to="/notas-faturas?tab=exportacao-fatura" replace />} />
                 <Route path="/ofx-import" element={<OfxImportWizard />} />

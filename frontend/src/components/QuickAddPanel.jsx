@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
 import { api } from '../api/client.js';
-import ReauthModal from '../components/ReauthModal.jsx';
 import {
     enqueueQuickAddTransaction,
     listQueuedQuickAddTransactions,
@@ -16,7 +15,7 @@ function isOfflineError(err) {
     return !navigator.onLine || err instanceof TypeError;
 }
 
-export default function QuickAdd() {
+export default function QuickAddPanel() {
     const [categories, setCategories] = useState([]);
     const [accounts, setAccounts] = useState([]);
     const [cards, setCards] = useState([]);
@@ -118,10 +117,6 @@ export default function QuickAdd() {
     return (
         <div className="quickadd-screen">
             <div className="quickadd-panel">
-                <div className="quickadd-header">
-                    <h1>Lancamento rapido</h1>
-                </div>
-
                 {pendingCount > 0 && (
                     <p className="muted">
                         {pendingCount} lancamento{pendingCount > 1 ? 's' : ''} pendente{pendingCount > 1 ? 's' : ''} de sincronizacao (salvos offline neste dispositivo).
@@ -242,8 +237,6 @@ export default function QuickAdd() {
                     </button>
                 </form>
             </div>
-
-            <ReauthModal />
         </div>
     );
 }

@@ -1,10 +1,12 @@
 import { Fragment, useEffect, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { api } from '../api/client.js';
 import { usePolling } from '../hooks/usePolling.js';
 import { usePrivacy } from '../context/PrivacyContext.jsx';
 import { useAuth } from '../context/AuthContext.jsx';
 import { formatCurrency } from '../utils/currency.js';
 import { PROVIDER_LABELS } from '../constants/providers.js';
+import QuickAddPanel from '../components/QuickAddPanel.jsx';
 
 // A API ja devolve os lancamentos ordenados por data DESC (ver GET
 // /transactions), entao agrupar por mes so precisa observar quando o "YYYY-MM"
@@ -33,7 +35,21 @@ function bankNameForTxn(t, accountsById, cardsById) {
     return '-';
 }
 
+const TABS = [
+    { value: 'lancamentos', label: 'Lancamentos' },
+    { value: 'rapido', label: 'Lancamento Rapido' },
+];
+
 export default function Transactions() {
+    const [searchParams, setSearchParams] = useSearchParams();
+    const initialTab = TABS.some((t) => t.value === searchParams.get('tab')) ? searchParams.get('tab') : TABS[0].value;
+    const [tab, setTab] = useState(initialTab);
+
+    const changeTab = (value) => {
+        setTab(value);
+        setSearchParams(value === TABS[0].value ? {} : { tab: value });
+    };
+
     const { user } = useAuth();
     const [transactions, setTransactions] = useState([]);
     const [categories, setCategories] = useState([]);
@@ -227,7 +243,19 @@ export default function Transactions() {
 
     return (
         <div className="page">
-            <h1>Lancamentos</h1>
+            <h1>Lancamentos e Lancamento Rapido</h1>
+
+            <div className="segmented-tabs">
+                {TABS.map((t) => (
+                    <button key={t.value} className={tab === t.value ? 'active' : ''} onClick={() => changeTab(t.value)}>
+                        {t.label}
+                    </button>
+                ))}
+            </div>
+
+            {tab === 'rapido' && <QuickAddPanel />}
+            {tab === 'lancamentos' && (
+            <>
             {error && <div className="error-msg">{error}</div>}
 
             <section className="card">
@@ -435,6 +463,8 @@ export default function Transactions() {
                         </div>
                     </div>
                 </div>
+            )}
+            </>
             )}
         </div>
     );

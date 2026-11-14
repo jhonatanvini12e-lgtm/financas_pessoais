@@ -18,7 +18,7 @@ function Icon({ children }) {
 }
 
 const SHORTCUTS = [
-    { to: '/quick-add', label: 'Nova despesa', icon: <Icon><path d="M13 2 3 14h7l-1 8 11-14h-7z" /></Icon> },
+    { to: '/transactions?tab=rapido', label: 'Nova despesa', icon: <Icon><path d="M13 2 3 14h7l-1 8 11-14h-7z" /></Icon> },
     { to: '/accounts', label: 'Contas e cartões', icon: <Icon><rect x="2.5" y="5.5" width="19" height="13" rx="2.5" /><path d="M2.5 10h19" /></Icon> },
     { to: '/analytics', label: 'Relatórios', icon: <Icon><path d="M4 20V10M12 20V4M20 20v-7" /></Icon> },
     { to: '/caixinhas-investimentos', label: 'Caixinhas', icon: <Icon><path d="M3 17l6-7 4 4 7-9" /><path d="M14 5h6v6" /></Icon> },

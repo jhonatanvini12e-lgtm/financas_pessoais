@@ -23,13 +23,8 @@ const NAV_ITEMS = [
         ),
     },
     {
-        to: '/transactions', label: 'Lancamentos', icon: (
+        to: '/transactions', label: 'Lancamentos e Lancamento Rapido', icon: (
             <Icon><path d="M6 3h9l3 3v15H6z" /><path d="M9 9h6M9 13h6M9 17h3" /></Icon>
-        ),
-    },
-    {
-        to: '/quick-add', label: 'Lancamento Rapido', icon: (
-            <Icon><path d="M13 2 3 14h7l-1 8 11-14h-7z" /></Icon>
         ),
     },
     {
@@ -76,7 +71,8 @@ const NAV_ITEMS = [
 
 // Itens de maior uso no dia a dia ficam fixos na barra inferior do mobile;
 // o resto mora na folha "Mais" para nao espremer a barra.
-const BOTTOM_NAV_PATHS = ['/', '/notas-faturas', '/quick-add'];
+const QUICK_ADD_PATH = '/transactions?tab=rapido';
+const BOTTOM_NAV_PATHS = ['/', '/notas-faturas', QUICK_ADD_PATH];
 const bottomNavItem = (path) => NAV_ITEMS.find((item) => item.to === path);
 const sheetItems = NAV_ITEMS.filter((item) => !BOTTOM_NAV_PATHS.includes(item.to));
 
@@ -135,14 +131,14 @@ export default function Layout() {
 
                 <nav className="bottom-nav">
                     {BOTTOM_NAV_PATHS.map((path) => {
-                        const item = bottomNavItem(path);
-                        if (path === '/quick-add') {
+                        if (path === QUICK_ADD_PATH) {
                             return (
-                                <NavLink key={path} to={path} className="bn-add" aria-label={item.label}>
+                                <NavLink key={path} to={path} className="bn-add" aria-label="Lancamento Rapido">
                                     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round"><path d="M12 5v14M5 12h14" /></svg>
                                 </NavLink>
                             );
                         }
+                        const item = bottomNavItem(path);
                         return (
                             <NavLink key={path} to={path} end={item.end} className="bn-item">
                                 {item.icon}
