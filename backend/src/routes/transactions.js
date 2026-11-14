@@ -161,7 +161,7 @@ router.post('/', (req, res) => {
         return res.status(400).json({ error: 'Usuario invalido' });
     }
 
-    const resolvedCategory = category_id ?? categorize(req.user.householdId, description);
+    const resolvedCategory = category_id ?? categorize(req.user.householdId, description, undefined, undefined, numericAmount);
     const resolvedCreatedBy = created_by || req.user.id;
     const totalInstallments = Math.min(Math.max(Number(installments) || 1, 1), 120);
 
@@ -360,7 +360,7 @@ router.post('/import-statement/preview', uploadStatementFile, async (req, res) =
         // da descricao -- fallback usado sobretudo quando a descricao crua do
         // extrato nao bate com nenhuma keyword. So' uma sugestao inicial: o
         // usuario ainda pode trocar a categoria na tela de revisao.
-        let categoryId = categorize(req.user.householdId, txn.description, learningMap, categoriesWithKeywords);
+        let categoryId = categorize(req.user.householdId, txn.description, learningMap, categoriesWithKeywords, txn.amount);
         if (categoryId == null && txn.categoryNameSuggestion) {
             categoryId = categoryIdByName.get(txn.categoryNameSuggestion.trim().toLowerCase()) ?? null;
         }
@@ -549,7 +549,7 @@ router.post('/import-statement/commit', (req, res) => {
 router.post('/recategorize', (req, res) => {
     const uncategorized = db
         .prepare(
-            `SELECT id, description FROM transactions
+            `SELECT id, description, amount FROM transactions
              WHERE user_id = ? AND category_id IS NULL AND description IS NOT NULL`
         )
         .all(req.user.householdId);
@@ -560,7 +560,7 @@ router.post('/recategorize', (req, res) => {
 
     let updated = 0;
     for (const txn of uncategorized) {
-        const categoryId = categorize(req.user.householdId, txn.description, learningMap, categoriesWithKeywords);
+        const categoryId = categorize(req.user.householdId, txn.description, learningMap, categoriesWithKeywords, txn.amount);
         if (categoryId != null) {
             update.run(categoryId, txn.id);
             updated += 1;

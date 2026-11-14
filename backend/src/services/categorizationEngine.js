@@ -64,14 +64,18 @@ export function buildCategoryLearningMap(userId) {
 // de um loop (ver rotas de import/recategorize que passam isso adiante).
 export function buildCategoryKeywordList(userId) {
     return db
-        .prepare("SELECT id, keywords FROM categories WHERE user_id = ? AND keywords IS NOT NULL AND keywords != ''")
+        .prepare("SELECT id, keywords, type FROM categories WHERE user_id = ? AND keywords IS NOT NULL AND keywords != ''")
         .all(userId);
 }
 
 // `learningMap` e `categoriesWithKeywords` sao opcionais (recalculados a
 // partir do banco se omitidos) -- passe versoes pre-construidas ao
 // categorizar varios lancamentos em lote.
-export function categorize(userId, description, learningMap, categoriesWithKeywords) {
+// `amount`, quando informado, impede que uma keyword generica (ex: "pix",
+// "deposito") categorize uma transacao com o sinal errado: categoria do tipo
+// INCOME so' casa com amount >= 0, EXPENSE so' com amount < 0. Sem `amount`
+// (chamador nao sabe o valor ainda), nenhum filtro por sinal e aplicado.
+export function categorize(userId, description, learningMap, categoriesWithKeywords, amount) {
     if (!description) return null;
 
     const normalizedKey = normalizeForMatch(description);
@@ -81,8 +85,10 @@ export function categorize(userId, description, learningMap, categoriesWithKeywo
 
     const normalizedDescription = description.toLowerCase();
     const categories = categoriesWithKeywords || buildCategoryKeywordList(userId);
+    const requiredType = amount == null ? null : amount >= 0 ? 'INCOME' : 'EXPENSE';
 
     for (const category of categories) {
+        if (requiredType && category.type && category.type !== requiredType) continue;
         const keywords = category.keywords.split(',').map((k) => k.trim().toLowerCase()).filter(Boolean);
         if (keywords.some((keyword) => normalizedDescription.includes(keyword))) {
             return category.id;

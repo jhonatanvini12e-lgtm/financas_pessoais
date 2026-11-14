@@ -407,7 +407,7 @@ function reconcileTransactions(link, desired) {
         db.prepare('SELECT id, name FROM categories WHERE user_id = ?').all(link.user_id).map((c) => [normalizeName(c.name), c.id])
     );
     const categorizeRow = (d) =>
-        categorize(link.user_id, d.description, learningMap, categoriesWithKeywords) ??
+        categorize(link.user_id, d.description, learningMap, categoriesWithKeywords, d.amount) ??
         categoryIdByName.get(normalizeName(PLUGGY_CATEGORY_TO_APP[d.pluggyCategory])) ??
         null;
     const insert = db.prepare(
@@ -649,7 +649,7 @@ function reconcileAccountTransactions(link, desired) {
         db.prepare('SELECT id, name FROM categories WHERE user_id = ?').all(link.user_id).map((c) => [normalizeName(c.name), c.id])
     );
     const categorizeRow = (d) =>
-        categorize(link.user_id, d.description, learningMap, categoriesWithKeywords) ??
+        categorize(link.user_id, d.description, learningMap, categoriesWithKeywords, d.amount) ??
         categoryIdByName.get(normalizeName(PLUGGY_CATEGORY_TO_APP[d.pluggyCategory])) ??
         null;
 
