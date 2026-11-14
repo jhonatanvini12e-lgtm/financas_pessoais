@@ -11,8 +11,6 @@ import Categories from './pages/Categories.jsx';
 import Budget from './pages/Budget.jsx';
 import NotasFaturas from './pages/NotasFaturas.jsx';
 import CaixinhasInvestimentos from './pages/CaixinhasInvestimentos.jsx';
-import TurningPoint from './pages/TurningPoint.jsx';
-import Intelligence from './pages/Intelligence.jsx';
 import Analytics from './pages/Analytics.jsx';
 import Alerts from './pages/Alerts.jsx';
 import Settings from './pages/Settings.jsx';
@@ -41,8 +39,8 @@ function App() {
                 <Route path="/envelopes" element={<Navigate to="/caixinhas-investimentos" replace />} />
                 <Route path="/investments" element={<Navigate to="/caixinhas-investimentos" replace />} />
                 <Route path="/banks" element={<Navigate to="/notas-faturas?tab=exportacao-fatura" replace />} />
-                <Route path="/turning-point" element={<TurningPoint />} />
-                <Route path="/intelligence" element={<Intelligence />} />
+                <Route path="/turning-point" element={<Navigate to="/analytics?tab=ponto-de-virada" replace />} />
+                <Route path="/intelligence" element={<Navigate to="/analytics?tab=inteligencia" replace />} />
                 <Route path="/analytics" element={<Analytics />} />
                 <Route path="/connections" element={<Navigate to="/accounts?tab=conexoes" replace />} />
                 <Route path="/alerts" element={<Alerts />} />

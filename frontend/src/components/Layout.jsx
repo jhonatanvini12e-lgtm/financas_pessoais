@@ -58,17 +58,7 @@ const NAV_ITEMS = [
         ),
     },
     {
-        to: '/turning-point', label: 'Ponto de Virada', icon: (
-            <Icon><path d="M5 21V4" /><path d="M5 4h12l-3 4 3 4H5" /></Icon>
-        ),
-    },
-    {
-        to: '/intelligence', label: 'Inteligencia Financeira', icon: (
-            <Icon><path d="M12 2l1.8 5.6L19 9l-5.2 1.4L12 16l-1.8-5.6L5 9l5.2-1.4Z" /></Icon>
-        ),
-    },
-    {
-        to: '/analytics', label: 'Analises', icon: (
+        to: '/analytics', label: 'Analises, Inteligencia e Ponto de Virada', icon: (
             <Icon><path d="M4 20V10M12 20V4M20 20v-7" /></Icon>
         ),
     },

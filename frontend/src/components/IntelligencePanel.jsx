@@ -5,7 +5,7 @@ import BarChartCard from '../components/charts/BarChartCard.jsx';
 
 const formatIntegerCurrency = (value) => `R$ ${Math.round(value || 0).toLocaleString('pt-BR')}`;
 
-export default function Intelligence() {
+export default function IntelligencePanel() {
     const [data3, setData3] = useState(null);
     const [data6, setData6] = useState(null);
     const [error, setError] = useState('');
@@ -19,9 +19,7 @@ export default function Intelligence() {
     if (!data3 || !data6) return <p>Carregando...</p>;
 
     return (
-        <div className="page">
-            <h1>Inteligencia Financeira</h1>
-
+        <div>
             <div className="two-col">
                 <LineChartCard
                     title="Ultimos 3 meses"

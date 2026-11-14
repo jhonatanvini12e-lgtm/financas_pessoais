@@ -1,9 +1,12 @@
 import { useEffect, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { api } from '../api/client.js';
 import StatCard from '../components/StatCard.jsx';
 import BarChartCard from '../components/charts/BarChartCard.jsx';
 import LineChartCard from '../components/charts/LineChartCard.jsx';
 import { usePrivacy } from '../context/PrivacyContext.jsx';
+import IntelligencePanel from '../components/IntelligencePanel.jsx';
+import TurningPointPanel from '../components/TurningPointPanel.jsx';
 
 const MONTHS_OPTIONS = [
     { value: 3, label: 'Ultimos 3 meses' },
@@ -34,7 +37,22 @@ function CardUserFilter({ cards, members, cardId, onCardChange, userId, onUserCh
     );
 }
 
+const TABS = [
+    { value: 'analises', label: 'Analises' },
+    { value: 'inteligencia', label: 'Inteligencia Financeira' },
+    { value: 'ponto-de-virada', label: 'Ponto de Virada' },
+];
+
 export default function Analytics() {
+    const [searchParams, setSearchParams] = useSearchParams();
+    const initialTab = TABS.some((t) => t.value === searchParams.get('tab')) ? searchParams.get('tab') : TABS[0].value;
+    const [tab, setTab] = useState(initialTab);
+
+    const changeTab = (value) => {
+        setTab(value);
+        setSearchParams(value === TABS[0].value ? {} : { tab: value });
+    };
+
     const { hideValues } = usePrivacy();
     const [cards, setCards] = useState([]);
     const [members, setMembers] = useState([]);
@@ -91,8 +109,20 @@ export default function Analytics() {
 
     return (
         <div className="page">
-            <h1>Analises</h1>
+            <h1>Analises, Inteligencia e Ponto de Virada</h1>
 
+            <div className="segmented-tabs">
+                {TABS.map((t) => (
+                    <button key={t.value} className={tab === t.value ? 'active' : ''} onClick={() => changeTab(t.value)}>
+                        {t.label}
+                    </button>
+                ))}
+            </div>
+
+            {tab === 'inteligencia' && <IntelligencePanel />}
+            {tab === 'ponto-de-virada' && <TurningPointPanel />}
+            {tab === 'analises' && (
+            <>
             <section className="card">
                 <div className="page-header-row">
                     <h2>Gasto mensal total</h2>
@@ -222,6 +252,8 @@ export default function Analytics() {
                     </>
                 )}
             </section>
+            </>
+            )}
         </div>
     );
 }

@@ -4,7 +4,7 @@ import LineChartCard from '../components/charts/LineChartCard.jsx';
 
 const formatIntegerCurrency = (value) => `R$ ${Math.round(value || 0).toLocaleString('pt-BR')}`;
 
-export default function TurningPoint() {
+export default function TurningPointPanel() {
     const [data, setData] = useState(null);
     const [error, setError] = useState('');
 
@@ -16,8 +16,7 @@ export default function TurningPoint() {
     if (!data) return <p>Carregando...</p>;
 
     return (
-        <div className="page">
-            <h1>Ponto de Virada</h1>
+        <div>
             <p className="muted">
                 Projecao de longo prazo comparando o retorno acumulado dos investimentos com os juros acumulados pagos nas dividas.
             </p>
