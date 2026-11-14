@@ -48,23 +48,8 @@ const NAV_ITEMS = [
         ),
     },
     {
-        to: '/invoice-export', label: 'Exportacao de Fatura', icon: (
-            <Icon><path d="M12 3v12" /><path d="m7 11 5 5 5-5" /><path d="M5 21h14" /></Icon>
-        ),
-    },
-    {
-        to: '/bills', label: 'Contas a Pagar', icon: (
-            <Icon><rect x="3" y="4" width="18" height="17" rx="2.5" /><path d="M3 9h18M8 2v4M16 2v4" /></Icon>
-        ),
-    },
-    {
-        to: '/notas-faturas', label: 'Notas e Faturas', icon: (
+        to: '/notas-faturas', label: 'Notas Faturas e Dividas', icon: (
             <Icon><path d="M7 3h7l4 4v14H7z" /><path d="M10 10h6M10 14h6M10 18h4" /></Icon>
-        ),
-    },
-    {
-        to: '/debts', label: 'Dividas', icon: (
-            <Icon><path d="M3 7h5l4 13 4-17 4 11h1" /></Icon>
         ),
     },
     {
@@ -101,7 +86,7 @@ const NAV_ITEMS = [
 
 // Itens de maior uso no dia a dia ficam fixos na barra inferior do mobile;
 // o resto mora na folha "Mais" para nao espremer a barra.
-const BOTTOM_NAV_PATHS = ['/', '/bills', '/quick-add', '/debts'];
+const BOTTOM_NAV_PATHS = ['/', '/notas-faturas', '/quick-add'];
 const bottomNavItem = (path) => NAV_ITEMS.find((item) => item.to === path);
 const sheetItems = NAV_ITEMS.filter((item) => !BOTTOM_NAV_PATHS.includes(item.to));
 

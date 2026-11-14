@@ -315,7 +315,7 @@ export default function OfxImportWizard() {
                         )}
                         {result.registeredBillId && (
                             <p className="muted">
-                                A fatura e o vencimento foram registrados automaticamente em <Link to="/bills">Contas a Pagar</Link>.
+                                A fatura e o vencimento foram registrados automaticamente em <Link to="/notas-faturas?tab=contas-a-pagar">Contas a Pagar</Link>.
                             </p>
                         )}
                         <button className="btn-primary" onClick={reset}>

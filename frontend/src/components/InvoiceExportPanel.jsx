@@ -6,10 +6,9 @@ import { Link } from 'react-router-dom';
 // fatura/extrato manualmente do app/site do banco ou cartao e trazer pro
 // assistente de importacao -- unico caminho de entrada de lancamentos em
 // lote no app.
-export default function InvoiceExport() {
+export default function InvoiceExportPanel() {
     return (
-        <div className="page">
-            <h1>Exportacao de Fatura</h1>
+        <div>
             <p className="muted">
                 Nao ha sincronizacao automatica com bancos ou cartoes. Exporte a fatura ou o extrato pelo app/site do
                 seu banco ou cartao (.ofx, .csv, .xlsx ou .pdf) e importe pelo assistente abaixo.

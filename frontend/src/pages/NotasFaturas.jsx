@@ -1,8 +1,12 @@
 import { useEffect, useRef, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { api } from '../api/client.js';
 import { usePolling } from '../hooks/usePolling.js';
 import { usePrivacy } from '../context/PrivacyContext.jsx';
 import { formatCurrency } from '../utils/currency.js';
+import BillsPanel from '../components/BillsPanel.jsx';
+import InvoiceExportPanel from '../components/InvoiceExportPanel.jsx';
+import DebtsPanel from '../components/DebtsPanel.jsx';
 
 const BILL_STATUS_LABEL = { OPEN: 'A vencer', LATE: 'Vencida' };
 const BILL_STATUS_CLASS = { OPEN: 'status-pending', LATE: 'status-late' };
@@ -14,20 +18,49 @@ function formatDate(iso) {
     return `${d}/${m}/${y}`;
 }
 
+const TABS = [
+    { value: 'contas-a-pagar', label: 'Contas a Pagar' },
+    { value: 'notas-faturas', label: 'Notas e Faturas' },
+    { value: 'exportacao-fatura', label: 'Exportacao de Fatura' },
+    { value: 'dividas', label: 'Dividas' },
+];
+
 export default function NotasFaturas() {
-    const [tab, setTab] = useState('faturas');
+    const [searchParams, setSearchParams] = useSearchParams();
+    const initialTab = TABS.some((t) => t.value === searchParams.get('tab')) ? searchParams.get('tab') : TABS[0].value;
+    const [tab, setTab] = useState(initialTab);
+    const [notasSubTab, setNotasSubTab] = useState('faturas');
     const { hideValues } = usePrivacy();
+
+    const changeTab = (value) => {
+        setTab(value);
+        setSearchParams(value === TABS[0].value ? {} : { tab: value });
+    };
 
     return (
         <div className="page">
-            <h1>Notas e Faturas</h1>
+            <h1>Notas Faturas e Dividas</h1>
 
             <div className="segmented-tabs">
-                <button className={tab === 'faturas' ? 'active' : ''} onClick={() => setTab('faturas')}>Faturas</button>
-                <button className={tab === 'notas' ? 'active' : ''} onClick={() => setTab('notas')}>Notas fiscais</button>
+                {TABS.map((t) => (
+                    <button key={t.value} className={tab === t.value ? 'active' : ''} onClick={() => changeTab(t.value)}>
+                        {t.label}
+                    </button>
+                ))}
             </div>
 
-            {tab === 'faturas' ? <FaturasTab hideValues={hideValues} /> : <NotasTab hideValues={hideValues} />}
+            {tab === 'contas-a-pagar' && <BillsPanel />}
+            {tab === 'exportacao-fatura' && <InvoiceExportPanel />}
+            {tab === 'dividas' && <DebtsPanel />}
+            {tab === 'notas-faturas' && (
+                <>
+                    <div className="segmented-tabs">
+                        <button className={notasSubTab === 'faturas' ? 'active' : ''} onClick={() => setNotasSubTab('faturas')}>Faturas</button>
+                        <button className={notasSubTab === 'notas' ? 'active' : ''} onClick={() => setNotasSubTab('notas')}>Notas fiscais</button>
+                    </div>
+                    {notasSubTab === 'faturas' ? <FaturasTab hideValues={hideValues} /> : <NotasTab hideValues={hideValues} />}
+                </>
+            )}
         </div>
     );
 }

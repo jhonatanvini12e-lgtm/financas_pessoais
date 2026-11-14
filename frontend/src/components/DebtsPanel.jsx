@@ -5,7 +5,7 @@ import LineChartCard from '../components/charts/LineChartCard.jsx';
 import { usePrivacy } from '../context/PrivacyContext.jsx';
 import { formatCurrency } from '../utils/currency.js';
 
-export default function Debts() {
+export default function DebtsPanel() {
     const [debts, setDebts] = useState([]);
     const [summary, setSummary] = useState(null);
     const [plan, setPlan] = useState(null);
@@ -85,8 +85,7 @@ export default function Debts() {
     }));
 
     return (
-        <div className="page">
-            <h1>Dividas</h1>
+        <div>
             {error && <div className="error-msg">{error}</div>}
 
             {summary && (

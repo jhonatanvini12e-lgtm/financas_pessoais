@@ -15,7 +15,7 @@ function typeKeyFor(item) {
 
 const EMPTY_FORM = { name: '', category_id: '', expected_amount: '', due_day: '', due_date: '', recurring: true };
 
-export default function Bills() {
+export default function BillsPanel() {
     const [data, setData] = useState(null);
     const [categories, setCategories] = useState([]);
     const [error, setError] = useState('');
@@ -96,11 +96,10 @@ export default function Bills() {
         }
     };
 
-    if (!data) return <div className="page"><h1>Contas a Pagar</h1>{error && <div className="error-msg">{error}</div>}</div>;
+    if (!data) return <>{error && <div className="error-msg">{error}</div>}</>;
 
     return (
-        <div className="page">
-            <h1>Contas a Pagar</h1>
+        <div>
             {error && <div className="error-msg">{error}</div>}
 
             <div className="stat-grid">

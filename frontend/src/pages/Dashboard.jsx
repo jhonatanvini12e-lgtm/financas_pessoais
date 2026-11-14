@@ -185,7 +185,7 @@ export default function Dashboard() {
                 <section className="card dash-card">
                     <div className="card-head">
                         <h2>Contas a pagar</h2>
-                        <Link to="/bills" className="card-head-link">Ver todas</Link>
+                        <Link to="/notas-faturas?tab=contas-a-pagar" className="card-head-link">Ver todas</Link>
                     </div>
                     {billItems.length === 0 && <p className="muted">Nenhuma conta cadastrada.</p>}
                     <div className="bill-list">
@@ -261,7 +261,7 @@ export default function Dashboard() {
                 <section className="card dash-card">
                     <div className="card-head">
                         <h2>Próximos vencimentos</h2>
-                        <Link to="/bills" className="card-head-link">Ver tudo</Link>
+                        <Link to="/notas-faturas?tab=contas-a-pagar" className="card-head-link">Ver tudo</Link>
                     </div>
                     {upcoming.length === 0 && <p className="muted">Nenhum vencimento pendente.</p>}
                     <div className="bill-list">
