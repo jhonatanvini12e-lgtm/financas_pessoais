@@ -21,6 +21,7 @@ import {
     backupsRateLimiter,
     pluggyRateLimiter,
     aiAssistantRateLimiter,
+    aiCategorizeRateLimiter,
 } from './middleware/rateLimiter.js';
 import { csrfProtection } from './middleware/csrf.js';
 import { startCronJobs } from './cron/index.js';
@@ -79,6 +80,7 @@ app.use('/api/auth/webauthn/login-verify', twoFactorRateLimiter);
 app.use('/api/auth', authRoutes);
 
 app.use('/api/transactions/import-statement', authMiddleware, importStatementRateLimiter);
+app.use('/api/transactions/ai-categorize-suggestions', authMiddleware, aiCategorizeRateLimiter);
 app.use('/api/backups/run', authMiddleware, backupsRateLimiter);
 
 app.use('/api/accounts', authMiddleware, accountsRoutes);

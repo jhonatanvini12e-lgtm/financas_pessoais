@@ -73,6 +73,11 @@ export default function Transactions() {
     const [deletingTxn, setDeletingTxn] = useState(null);
     const [deleting, setDeleting] = useState(false);
     const [applyingToInstallments, setApplyingToInstallments] = useState(false);
+    const [aiSuggesting, setAiSuggesting] = useState(false);
+    const [aiSuggestError, setAiSuggestError] = useState('');
+    const [aiSuggestions, setAiSuggestions] = useState(null);
+    const [aiRemainingGroups, setAiRemainingGroups] = useState(0);
+    const [aiApplying, setAiApplying] = useState(false);
     const { hideValues } = usePrivacy();
 
     // Pre-seleciona o proprio usuario logado no formulario de novo lancamento
@@ -210,6 +215,56 @@ export default function Transactions() {
         }
     };
 
+    const suggestCategoriesWithAI = async () => {
+        setAiSuggesting(true);
+        setAiSuggestError('');
+        try {
+            const data = await api.post('/transactions/ai-categorize-suggestions', {});
+            setAiSuggestions(
+                data.suggestions.map((s) => ({
+                    ...s,
+                    selected: s.suggestedCategoryId != null,
+                    categoryId: s.suggestedCategoryId != null ? String(s.suggestedCategoryId) : '',
+                }))
+            );
+            setAiRemainingGroups(data.remainingGroups);
+        } catch (err) {
+            setAiSuggestError(err.message);
+        } finally {
+            setAiSuggesting(false);
+        }
+    };
+
+    const updateAiSuggestion = (index, changes) => {
+        setAiSuggestions((prev) => prev.map((s, i) => (i === index ? { ...s, ...changes } : s)));
+    };
+
+    const closeAiSuggestions = () => {
+        setAiSuggestions(null);
+        setAiSuggestError('');
+    };
+
+    const applyAiSuggestions = async () => {
+        const selections = aiSuggestions
+            .filter((s) => s.selected && s.categoryId)
+            .map((s) => ({ description: s.description, categoryId: Number(s.categoryId) }));
+        if (selections.length === 0) {
+            closeAiSuggestions();
+            return;
+        }
+        setAiApplying(true);
+        try {
+            const data = await api.post('/transactions/apply-category-suggestions', { selections });
+            setRecategorizeMsg(`${data.updated} lancamento(s) categorizado(s) via IA.`);
+            closeAiSuggestions();
+            load();
+        } catch (err) {
+            setAiSuggestError(err.message);
+        } finally {
+            setAiApplying(false);
+        }
+    };
+
     const saveEdit = async (e) => {
         e.preventDefault();
         try {
@@ -337,6 +392,9 @@ export default function Transactions() {
                     <input type="text" placeholder="Buscar por descricao..." value={search} onChange={(e) => setSearch(e.target.value)} />
                     <button type="button" className="btn-link" disabled={recategorizing} onClick={recategorize}>
                         {recategorizing ? 'Recategorizando...' : 'Recategorizar sem categoria a partir do historico'}
+                    </button>
+                    <button type="button" className="btn-link" disabled={aiSuggesting} onClick={suggestCategoriesWithAI}>
+                        {aiSuggesting ? 'Pensando...' : 'Sugerir categorias com IA'}
                     </button>
                 </div>
                 {recategorizeMsg && <p className="muted">{recategorizeMsg}</p>}
@@ -492,6 +550,72 @@ export default function Transactions() {
                                 {deleting ? 'Removendo...' : 'Remover'}
                             </button>
                         </div>
+                    </div>
+                </div>
+            )}
+
+            {aiSuggestions && (
+                <div className="modal-overlay" onClick={closeAiSuggestions}>
+                    <div className="glass-panel budget-detail-panel" onClick={(e) => e.stopPropagation()}>
+                        <div className="budget-detail-header">
+                            <h2>Sugestoes de categoria (IA)</h2>
+                            <button type="button" className="btn-icon" title="Fechar" aria-label="Fechar" onClick={closeAiSuggestions}>✕</button>
+                        </div>
+
+                        {aiSuggestError && <div className="error-msg">{aiSuggestError}</div>}
+
+                        {aiSuggestions.length === 0 ? (
+                            <p className="muted">Nenhum lancamento sem categoria encontrado.</p>
+                        ) : (
+                            <>
+                                <p className="muted">
+                                    Revise antes de aplicar -- desmarque ou troque a categoria de qualquer linha que a IA tenha errado.
+                                    {aiRemainingGroups > 0 && ` Ha mais ${aiRemainingGroups} descricao(oes) sem categoria; rode de novo depois de aplicar este lote.`}
+                                </p>
+                                <div className="table-scroll">
+                                    <table className="data-table">
+                                        <thead>
+                                            <tr><th /><th>Descricao</th><th>Qtd</th><th>Total</th><th>Categoria sugerida</th></tr>
+                                        </thead>
+                                        <tbody>
+                                            {aiSuggestions.map((s, i) => (
+                                                <tr key={`${s.description}-${i}`}>
+                                                    <td>
+                                                        <input
+                                                            type="checkbox"
+                                                            checked={s.selected}
+                                                            onChange={(e) => updateAiSuggestion(i, { selected: e.target.checked })}
+                                                        />
+                                                    </td>
+                                                    <td>{s.description}</td>
+                                                    <td>{s.count}</td>
+                                                    <td className={s.total < 0 ? 'text-negative' : 'text-positive'}>{formatCurrency(s.total, hideValues)}</td>
+                                                    <td>
+                                                        <select
+                                                            value={s.categoryId}
+                                                            onChange={(e) => updateAiSuggestion(i, { categoryId: e.target.value, selected: Boolean(e.target.value) })}
+                                                        >
+                                                            <option value="">Nenhuma (nao categorizar)</option>
+                                                            {categories.filter((c) => c.type === s.type).map((c) => (
+                                                                <option key={c.id} value={c.id}>{c.name}</option>
+                                                            ))}
+                                                        </select>
+                                                    </td>
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                    </table>
+                                </div>
+                                <div className="wizard-actions">
+                                    <button type="button" className="btn-link" disabled={aiApplying} onClick={closeAiSuggestions}>
+                                        Cancelar
+                                    </button>
+                                    <button type="button" className="btn-primary" disabled={aiApplying} onClick={applyAiSuggestions}>
+                                        {aiApplying ? 'Aplicando...' : 'Aplicar selecionadas'}
+                                    </button>
+                                </div>
+                            </>
+                        )}
                     </div>
                 </div>
             )}

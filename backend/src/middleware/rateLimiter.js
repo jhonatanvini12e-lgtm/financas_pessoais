@@ -85,3 +85,14 @@ export const aiAssistantRateLimiter = rateLimit({
     legacyHeaders: false,
     message: { error: 'Muitas mensagens para o assistente de IA. Tente novamente em alguns minutos.' },
 });
+
+// Cada chamada manda um lote de ate 60 descricoes pro Gemini/Groq -- limite
+// baixo (gerar sugestao e' uma acao ocasional, nao um botao pra clicar em
+// loop).
+export const aiCategorizeRateLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000,
+    max: 10,
+    standardHeaders: true,
+    legacyHeaders: false,
+    message: { error: 'Muitas sugestoes de categoria via IA. Tente novamente em alguns minutos.' },
+});

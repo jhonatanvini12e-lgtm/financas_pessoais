@@ -1,14 +1,14 @@
-// Cliente minimo da API da Pluggy (https://docs.pluggy.ai), usado so no
-// servidor: o clientSecret da acesso total aos dados bancarios conectados e
-// nunca deve chegar ao navegador. So' faz leitura -- os dados sao atualizados
-// pela propria Pluggy (Meu Pluggy sincroniza com o banco a cada ~24h), entao
-// nao disparamos atualizacao de item aqui: cada atualizacao forcada consome a
+// Cliente da API da Pluggy (https://docs.pluggy.ai), usado so no servidor: o
+// clientSecret da acesso total aos dados bancarios conectados e nunca deve
+// chegar ao navegador. So' faz leitura -- os dados sao atualizados pela
+// propria Pluggy (Meu Pluggy sincroniza com o banco a cada ~24h), entao nao
+// disparamos atualizacao de item aqui: cada atualizacao forcada consome a
 // cota mensal de chamadas do Open Finance por CPF/instituicao.
-const API_BASE = 'https://api.pluggy.ai';
-const REQUEST_TIMEOUT_MS = 30_000;
-// A API key vale 2h; renovamos com folga para nao usar uma chave que expira
-// no meio de uma sync.
-const API_KEY_TTL_MS = 110 * 60 * 1000;
+// Usa o SDK oficial (`pluggy-sdk`, pluggyai/pluggy-node no GitHub) em vez de
+// fetch cru: ele ja cuida de autenticacao/renovacao de API key e retry de
+// rede, e acompanha mudancas da API da Pluggy sem precisar atualizar este
+// arquivo na mao.
+import { PluggyClient } from 'pluggy-sdk';
 
 // O plano gratuito do Meu Pluggy e' por CPF: cada titular que conecta seus
 // proprios cartoes cria sua propria conta Meu Pluggy, com um client_id/secret
@@ -43,90 +43,70 @@ function credentialsForItem(itemId) {
     return group;
 }
 
-async function fetchJson(url, options) {
-    let res;
-    try {
-        res = await fetch(url, { ...options, signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS) });
-    } catch (err) {
-        throw new Error(`Falha ao contatar a Pluggy: ${err.message}`);
+// Uma instancia de PluggyClient por titular (client_id) -- o SDK cuida
+// sozinho de buscar/renovar a API key dessa instancia, nao precisamos mais
+// de cache/retry de autenticacao na mao.
+const clientCache = new Map(); // clientId -> PluggyClient
+function clientForItem(itemId) {
+    const credentials = credentialsForItem(itemId);
+    let client = clientCache.get(credentials.clientId);
+    if (!client) {
+        client = new PluggyClient({ clientId: credentials.clientId, clientSecret: credentials.clientSecret });
+        clientCache.set(credentials.clientId, client);
     }
-    const body = await res.json().catch(() => null);
-    if (!res.ok) {
-        const error = new Error(`Pluggy respondeu ${res.status}: ${body?.message || 'erro desconhecido'}`);
-        error.status = res.status;
-        throw error;
-    }
-    return body;
+    return client;
 }
 
-// Uma API key por titular (client_id) -- cada um autentica e expira
-// independente dos outros.
-const apiKeyCache = new Map(); // clientId -> { value, expiresAt }
-
-async function getApiKey(credentials, { forceRefresh = false } = {}) {
-    const cached = apiKeyCache.get(credentials.clientId);
-    if (!forceRefresh && cached && cached.expiresAt > Date.now()) return cached.value;
-
-    const { apiKey } = await fetchJson(`${API_BASE}/auth`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ clientId: credentials.clientId, clientSecret: credentials.clientSecret }),
-    });
-    apiKeyCache.set(credentials.clientId, { value: apiKey, expiresAt: Date.now() + API_KEY_TTL_MS });
-    return apiKey;
-}
-
-async function pluggyGet(pathWithQuery, credentials) {
-    const request = async (apiKey) => fetchJson(`${API_BASE}${pathWithQuery}`, { headers: { 'X-API-KEY': apiKey } });
-    try {
-        return await request(await getApiKey(credentials));
-    } catch (err) {
-        // Chave revogada/expirada antes do previsto: renova uma vez e tenta de novo.
-        if (err.status === 401 || err.status === 403) return request(await getApiKey(credentials, { forceRefresh: true }));
-        throw err;
+// O SDK faz parse de todo campo de data (string ISO) para instancia `Date`
+// (ver pluggy-sdk/dist/transforms.js, deserializeJSONWithDates). O resto do
+// codigo (pluggySyncService, pluggyBillsService) espera as mesmas strings ISO
+// cruas que a API da Pluggy devolve (ex: `txn.date.slice(0,10)`,
+// `bill.dueDate.endsWith(...)`) -- convertemos de volta aqui, na borda, para
+// nenhum consumidor precisar mudar.
+function denormalizeDates(value) {
+    if (value instanceof Date) return value.toISOString();
+    if (Array.isArray(value)) return value.map(denormalizeDates);
+    if (value && typeof value === 'object') {
+        const out = {};
+        for (const [key, val] of Object.entries(value)) out[key] = denormalizeDates(val);
+        return out;
     }
+    return value;
 }
 
 export async function getItem(itemId) {
-    return pluggyGet(`/items/${encodeURIComponent(itemId)}`, credentialsForItem(itemId));
+    return denormalizeDates(await clientForItem(itemId).fetchItem(itemId));
 }
 
 export async function listAccounts(itemId) {
-    const { results } = await pluggyGet(`/accounts?itemId=${encodeURIComponent(itemId)}`, credentialsForItem(itemId));
-    return results;
+    const { results } = await clientForItem(itemId).fetchAccounts(itemId);
+    return denormalizeDates(results);
 }
 
 // accountId nao diz por si so' de qual titular/item ele veio -- os
 // chamadores (pluggySyncService) precisam saber e passar o itemId
 // correspondente para resolver a credencial certa.
 export async function getAccount(accountId, itemId) {
-    return pluggyGet(`/accounts/${encodeURIComponent(accountId)}`, credentialsForItem(itemId));
+    return denormalizeDates(await clientForItem(itemId).fetchAccount(accountId));
 }
 
-// /v2/transactions pagina por cursor: `next` ja vem como a query string
-// pronta da proxima pagina (com o cursor opaco `after`), ou null na ultima.
-// Sem filtro de data de proposito -- a sync reconcilia o estado completo que
-// a Pluggy guarda (ate 12 meses), ver pluggySyncService.
+// `fetchAllTransactions` ja pagina (cursor) por baixo dos panos -- sem filtro
+// de data de proposito -- a sync reconcilia o estado completo que a Pluggy
+// guarda (ate 12 meses), ver pluggySyncService.
 export async function listTransactions(accountId, itemId) {
-    const credentials = credentialsForItem(itemId);
-    const all = [];
-    let query = `?accountId=${encodeURIComponent(accountId)}`;
-    while (query) {
-        const { results, next } = await pluggyGet(`/v2/transactions${query}`, credentials);
-        all.push(...results);
-        query = next;
-    }
-    return all;
+    const all = await clientForItem(itemId).fetchAllTransactions(accountId);
+    return denormalizeDates(all);
 }
 
-// /bills ainda pagina por numero de pagina (nao ha versao v2).
+// `fetchCreditCardBills` pagina por numero de pagina (sem helper "fetch all"
+// no SDK para esse endpoint).
 export async function listBills(accountId, itemId) {
-    const credentials = credentialsForItem(itemId);
+    const client = clientForItem(itemId);
     const all = [];
     for (let page = 1; ; page += 1) {
-        const { results, totalPages } = await pluggyGet(`/bills?accountId=${encodeURIComponent(accountId)}&page=${page}`, credentials);
+        const { results, totalPages } = await client.fetchCreditCardBills(accountId, { page });
         all.push(...results);
         if (page >= (totalPages || 1)) break;
     }
-    return all;
+    return denormalizeDates(all);
 }

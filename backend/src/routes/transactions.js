@@ -2,7 +2,8 @@ import express from 'express';
 import multer from 'multer';
 import crypto from 'node:crypto';
 import db from '../db/index.js';
-import { categorize, buildCategoryLearningMap, buildCategoryKeywordList } from '../services/categorizationEngine.js';
+import { categorize, buildCategoryLearningMap, buildCategoryKeywordList, normalizeForMatch } from '../services/categorizationEngine.js';
+import { suggestCategoriesForUncategorized } from '../services/aiCategorizationSuggester.js';
 import { parseStatementFile, SUPPORTED_STATEMENT_EXTENSIONS } from '../services/statementImport/index.js';
 import { addMonths } from '../services/statementImport/columnMapper.js';
 import { checkBudgetAlerts } from '../services/budgetEngine.js';
@@ -569,6 +570,63 @@ router.post('/recategorize', (req, res) => {
 
     checkBudgetAlerts(req.user.householdId);
     res.json({ updated, remaining: uncategorized.length - updated });
+});
+
+// Pede a IA (Gemini/Groq) para sugerir categoria para os lancamentos sem
+// categoria, agrupados por descricao (maior valor total primeiro). So'
+// sugere -- nada e' alterado aqui, o usuario confirma cada sugestao na tela
+// antes de aplicar (ver /apply-category-suggestions).
+router.post('/ai-categorize-suggestions', async (req, res) => {
+    try {
+        const result = await suggestCategoriesForUncategorized(req.user.householdId);
+        res.json(result);
+    } catch (err) {
+        res.status(502).json({ error: err.message });
+    }
+});
+
+// Aplica so' as sugestoes que o usuario confirmou (array de {description,
+// categoryId}). Nunca mexe em lancamento que ja tem categoria, e revalida
+// que o tipo da categoria bate com o sinal de cada lancamento antes de
+// aplicar (mesma salvaguarda do motor de categorizacao por keyword) --
+// protege contra a IA ter sugerido uma categoria de tipo errado.
+router.post('/apply-category-suggestions', (req, res) => {
+    const selections = Array.isArray(req.body.selections) ? req.body.selections : [];
+    if (selections.length === 0) return res.status(400).json({ error: 'selections (array) e obrigatorio' });
+
+    const categoriesById = new Map(
+        db.prepare('SELECT id, type FROM categories WHERE user_id = ?').all(req.user.householdId).map((c) => [c.id, c])
+    );
+
+    const uncategorized = db
+        .prepare('SELECT id, description, amount FROM transactions WHERE user_id = ? AND category_id IS NULL AND description IS NOT NULL')
+        .all(req.user.householdId);
+    const byNormalizedDescription = new Map();
+    for (const txn of uncategorized) {
+        const key = normalizeForMatch(txn.description);
+        const list = byNormalizedDescription.get(key) || [];
+        list.push(txn);
+        byNormalizedDescription.set(key, list);
+    }
+
+    const update = db.prepare('UPDATE transactions SET category_id = ? WHERE id = ?');
+    let updated = 0;
+    for (const selection of selections) {
+        const categoryId = Number(selection.categoryId);
+        const category = categoriesById.get(categoryId);
+        if (!category) continue;
+
+        const matches = byNormalizedDescription.get(normalizeForMatch(selection.description)) || [];
+        for (const txn of matches) {
+            const txnType = txn.amount >= 0 ? 'INCOME' : 'EXPENSE';
+            if (txnType !== category.type) continue;
+            update.run(categoryId, txn.id);
+            updated += 1;
+        }
+    }
+
+    checkBudgetAlerts(req.user.householdId);
+    res.json({ updated });
 });
 
 export default router;
