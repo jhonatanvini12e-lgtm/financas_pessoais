@@ -2,9 +2,9 @@ import db from '../db/index.js';
 import { getBudgetStatus } from './budgetEngine.js';
 import { getAllBillsStatus } from './billsService.js';
 import { getDebtSummary, getDebtPayoffPlan } from './debtCalculator.js';
-import { getGlobalCreditUsage } from './cardService.js';
-import { getContributionSuggestions } from './envelopeService.js';
-import { getInvestmentTrackStatus, getGoalsPlans } from './investmentCalculator.js';
+import { getCurrentInvoicePeriod, getGlobalCreditUsage } from './cardService.js';
+import { getContributionSuggestions, getEnvelopes } from './envelopeService.js';
+import { getInvestmentTrackStatus, getGoalsPlans, getTurningPointProjection } from './investmentCalculator.js';
 
 // Mesmo padrao de services/statementImport/pdfParser.js: Gemini como
 // provedor principal (free tier), Groq como backup, via fetch cru (sem SDK).
@@ -105,18 +105,41 @@ export function buildFinancialSnapshot(userId) {
     const contributions = getContributionSuggestions(userId);
     const investmentTrack = getInvestmentTrackStatus(userId);
     const goalsPlans = getGoalsPlans(userId);
-    const investmentLines = ['=== Investimentos e reserva de emergencia ===',
-        `Reserva de emergencia: ${money(contributions.emergencyFund.current)} de meta ${money(contributions.emergencyFund.target)} (${contributions.emergencyFund.complete ? 'completa' : 'incompleta'})`,
+    const envelopes = getEnvelopes(userId);
+    const turningPoint = getTurningPointProjection(userId);
+    const investmentLines = ['=== Caixinhas e investimentos ===',
+        `Renda media (3 meses): ${money(contributions.avgIncome)}, despesa media: ${money(contributions.avgExpense)}`,
+        `Reserva de emergencia: ${money(contributions.emergencyFund.current)} de meta ${money(contributions.emergencyFund.target)} (${contributions.emergencyFund.complete ? 'completa' : 'incompleta'}), aporte mensal sugerido ${money(contributions.emergencyFund.suggestedMonthlyContribution)}`,
+        `Reserva para imprevistos: aporte mensal sugerido ${money(contributions.unexpectedExpenses.suggestedMonthlyContribution)}`,
         `Total investido: ${money(investmentTrack.totalInvested)} (perfil ${investmentTrack.profile})`,
     ];
+    if (envelopes.length) {
+        investmentLines.push('Caixinhas (envelopes):');
+        investmentLines.push(...envelopes.map((e) => `- ${e.name} (${e.type}): ${money(e.current_amount)} de meta ${money(e.target_amount)}`));
+    }
     if (investmentTrack.investments.length) {
+        investmentLines.push('Investimentos:');
         investmentLines.push(...investmentTrack.investments.map((i) => `- ${i.name} (${i.type}): valor atual ${money(i.current_value)}`));
     }
     if (goalsPlans.length) {
         investmentLines.push('Metas de investimento:');
         investmentLines.push(...goalsPlans.map((g) => `- ${g.name}: aporte mensal necessario ${money(g.monthlyContributionRequired)} (${g.months} mes(es) restantes)`));
     }
+    investmentLines.push(
+        turningPoint.turningPointMonth
+            ? `Ponto de virada: no mes ${turningPoint.turningPointMonth} da projecao, o retorno dos investimentos passa a superar os juros pagos nas dividas (aporte mensal usado na projecao: ${money(turningPoint.monthlyContributionUsed)}).`
+            : 'Ponto de virada: sem cruzamento projetado no horizonte simulado entre retorno de investimentos e juros de dividas.'
+    );
     sections.push(investmentLines.join('\n'));
+
+    const categories = db.prepare('SELECT name, type, keywords FROM categories WHERE user_id = ? ORDER BY type, name').all(userId);
+    sections.push(
+        ['=== Categorias cadastradas ===',
+            ...(categories.length
+                ? categories.map((c) => `- ${c.name} (${c.type})${c.keywords ? `, palavras-chave: ${c.keywords}` : ''}`)
+                : ['Nenhuma categoria cadastrada.']),
+        ].join('\n')
+    );
 
     const spendingByCategory = db
         .prepare(
@@ -134,6 +157,70 @@ export function buildFinancialSnapshot(userId) {
         ].join('\n')
     );
 
+    const recentTransactions = db
+        .prepare(
+            `SELECT t.date, t.description, t.amount, c.name as category
+             FROM transactions t LEFT JOIN categories c ON c.id = t.category_id
+             WHERE t.user_id = ? ORDER BY t.date DESC, t.id DESC LIMIT 15`
+        )
+        .all(userId);
+    sections.push(
+        ['=== Lancamentos mais recentes ===',
+            ...(recentTransactions.length
+                ? recentTransactions.map((t) => `- ${t.date.slice(0, 10)} | ${t.description || '(sem descricao)'} | ${money(t.amount)} | ${t.category || 'sem categoria'}`)
+                : ['Nenhum lancamento registrado.']),
+        ].join('\n')
+    );
+
+    const monthlySpendingTrend = db
+        .prepare(
+            `SELECT strftime('%Y-%m', date) as month, SUM(ABS(amount)) as total
+             FROM transactions WHERE user_id = ? AND date >= ? AND amount < 0
+             GROUP BY month ORDER BY month`
+        )
+        .all(userId, monthsAgoISO(6));
+    const cashFlowTrend = db
+        .prepare(
+            `SELECT strftime('%Y-%m', date) as month,
+                    SUM(CASE WHEN amount >= 0 THEN amount ELSE 0 END) as income,
+                    SUM(CASE WHEN amount < 0 THEN ABS(amount) ELSE 0 END) as expense
+             FROM transactions WHERE user_id = ? AND date >= ?
+             GROUP BY month ORDER BY month`
+        )
+        .all(userId, monthsAgoISO(6));
+    const creditUsageByCard = cards.map((card) => {
+        const { periodStart, periodEnd } = getCurrentInvoicePeriod(card.closing_day, card.due_day);
+        const { used } = db
+            .prepare(
+                `SELECT COALESCE(SUM(ABS(amount)), 0) as used FROM transactions
+                 WHERE card_id = ? AND user_id = ? AND date >= ? AND date <= ? AND amount < 0`
+            )
+            .get(card.id, userId, periodStart.toISOString().slice(0, 10), periodEnd.toISOString().slice(0, 10));
+        return { name: card.card_name, used, limit: card.credit_limit };
+    });
+    const openInstallments = db
+        .prepare(
+            `SELECT COUNT(DISTINCT installment_group) as total, COALESCE(SUM(ABS(amount)), 0) as totalValue
+             FROM transactions WHERE user_id = ? AND installment_group IS NOT NULL`
+        )
+        .get(userId);
+
+    const analysisLines = ['=== Analises e inteligencia financeira ==='];
+    analysisLines.push(
+        'Gasto mensal total (ultimos 6 meses): ' +
+            (monthlySpendingTrend.length ? monthlySpendingTrend.map((m) => `${m.month}: ${money(m.total)}`).join(', ') : 'sem dados')
+    );
+    analysisLines.push(
+        'Fluxo de caixa mensal (entradas/saidas, ultimos 6 meses): ' +
+            (cashFlowTrend.length ? cashFlowTrend.map((m) => `${m.month}: +${money(m.income)}/-${money(m.expense)}`).join(', ') : 'sem dados')
+    );
+    if (creditUsageByCard.length) {
+        analysisLines.push('Uso de credito por cartao no ciclo atual:');
+        analysisLines.push(...creditUsageByCard.map((c) => `- ${c.name}: ${money(c.used)} de ${money(c.limit)} (${percent(c.limit > 0 ? c.used / c.limit : 0)})`));
+    }
+    analysisLines.push(`Parcelamentos em aberto: ${openInstallments.total} parcelamento(s), valor total ${money(openInstallments.totalValue)}`);
+    sections.push(analysisLines.join('\n'));
+
     return sections.join('\n\n');
 }
 
@@ -147,6 +234,7 @@ Regras importantes:
 - Quando o usuario parecer em dificuldade financeira (atraso em contas, dividas crescendo, uso alto de cartao), priorize um tom pratico, direto e acolhedor -- liste passos concretos e priorizados, nao so diagnostico.
 - Quando pedirem "relatorio" ou "resumo", organize a resposta em topicos curtos com os numeros relevantes do snapshot.
 - Responda sempre em portugues do Brasil, de forma objetiva (evite textao desnecessario).
+- O snapshot abaixo cobre: contas/cartoes, contas a pagar, orcamento, dividas, caixinhas/investimentos (com ponto de virada), categorias cadastradas (com palavras-chave), lancamentos recentes, gastos por categoria e analises (tendencia de gasto mensal, fluxo de caixa, uso de credito por cartao, parcelamentos em aberto). Use essas secoes para responder perguntas sobre essas telas do app com dados concretos, nao generico.
 
 === Snapshot financeiro atual ===
 ${snapshot}`;
