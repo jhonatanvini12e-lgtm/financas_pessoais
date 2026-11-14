@@ -45,6 +45,8 @@ export default function Transactions() {
     const [bankFilter, setBankFilter] = useState('');
     const [userFilter, setUserFilter] = useState('');
     const [search, setSearch] = useState('');
+    const [page, setPage] = useState(1);
+    const [pageSize, setPageSize] = useState(10);
     const [form, setForm] = useState({ description: '', amount: '', date: '', category_id: '', destination_type: 'none', destination_id: '', parcelado: false, installments: 2, created_by: '' });
     const [editingTxn, setEditingTxn] = useState(null);
     const [editForm, setEditForm] = useState({ description: '', amount: '', date: '', category_id: '', destination_type: 'none', destination_id: '', created_by: '' });
@@ -106,6 +108,16 @@ export default function Transactions() {
         if (search.trim() && !t.description?.toLowerCase().includes(search.trim().toLowerCase())) return false;
         return true;
     });
+
+    // Reseta pra primeira pagina sempre que os filtros mudam o conjunto
+    // visivel, senao o usuario pode ficar numa pagina que nao existe mais.
+    useEffect(() => {
+        setPage(1);
+    }, [filters, bankFilter, userFilter, search, pageSize]);
+
+    const totalPages = Math.max(1, Math.ceil(visibleTransactions.length / pageSize));
+    const currentPage = Math.min(page, totalPages);
+    const paginatedTransactions = visibleTransactions.slice((currentPage - 1) * pageSize, currentPage * pageSize);
 
     const addTransaction = async (e) => {
         e.preventDefault();
@@ -298,7 +310,7 @@ export default function Transactions() {
                     <tbody>
                         {(() => {
                             let lastMonth = null;
-                            return visibleTransactions.map((t) => {
+                            return paginatedTransactions.map((t) => {
                                 const monthKey = t.date.slice(0, 7);
                                 const isNewMonth = monthKey !== lastMonth;
                                 lastMonth = monthKey;
@@ -329,6 +341,30 @@ export default function Transactions() {
                         })()}
                     </tbody>
                 </table>
+                </div>
+
+                <div className="pagination-controls">
+                    <label className="pagination-size">
+                        Itens por pagina:
+                        <select value={pageSize} onChange={(e) => setPageSize(Number(e.target.value))}>
+                            <option value={10}>10</option>
+                            <option value={50}>50</option>
+                            <option value={100}>100</option>
+                        </select>
+                    </label>
+                    <div className="pagination-nav">
+                        <button type="button" className="btn-link" disabled={currentPage <= 1}
+                            onClick={() => setPage(currentPage - 1)}>
+                            Anterior
+                        </button>
+                        <span>
+                            Pagina {currentPage} de {totalPages} ({visibleTransactions.length} lancamento{visibleTransactions.length === 1 ? '' : 's'})
+                        </span>
+                        <button type="button" className="btn-link" disabled={currentPage >= totalPages}
+                            onClick={() => setPage(currentPage + 1)}>
+                            Proxima
+                        </button>
+                    </div>
                 </div>
             </section>
 

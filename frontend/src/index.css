@@ -1151,6 +1151,46 @@ a {
   border-bottom: 1px solid var(--border-glass);
 }
 
+.pagination-controls {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px solid var(--border-glass);
+}
+
+.pagination-size {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
+.pagination-nav {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
+.pagination-nav .btn-link:disabled {
+  opacity: 0.4;
+  cursor: default;
+  pointer-events: none;
+}
+
+@media (max-width: 560px) {
+  .pagination-controls {
+    justify-content: center;
+    text-align: center;
+  }
+}
+
 /* ---------- Bank connections / badges ---------- */
 
 .connection-card {
