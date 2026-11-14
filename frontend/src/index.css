@@ -1009,6 +1009,7 @@ a {
 .progress-ok { background: linear-gradient(90deg, var(--accent), var(--accent-blue)); }
 .progress-warning { background: var(--warning); }
 .progress-critical { background: var(--negative); }
+.progress-neutral { background: var(--border-glass-strong); }
 
 .budget-alert-warning { color: var(--warning); font-size: 13px; }
 .budget-alert-critical { color: var(--negative); font-size: 13px; }

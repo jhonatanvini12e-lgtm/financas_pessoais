@@ -32,12 +32,14 @@ export function getBudgetStatus(userId) {
 
     const categoryStatus = categories.map((cat) => {
         const spent = spentByCategory[cat.id] || 0;
-        const ratio = cat.budget_limit > 0 ? spent / cat.budget_limit : 0;
+        const hasLimit = cat.budget_limit > 0;
+        const ratio = hasLimit ? spent / cat.budget_limit : 0;
         return {
             categoryId: cat.id,
             name: cat.name,
             spent,
             limit: cat.budget_limit,
+            hasLimit,
             ratio,
             level: ratio >= budgetParams.budgetCriticalThreshold
                 ? 'CRITICAL'
@@ -58,6 +60,7 @@ export function getBudgetStatus(userId) {
             name: 'Sem categoria',
             spent: uncategorizedSpent,
             limit: 0,
+            hasLimit: false,
             ratio: 0,
             level: 'OK',
         });

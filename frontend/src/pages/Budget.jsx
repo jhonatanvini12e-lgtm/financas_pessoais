@@ -95,7 +95,12 @@ export default function Budget() {
                 <h2>Por categoria</h2>
                 {status.categories.map((cat) => (
                     <div key={cat.categoryId ?? 'none'} className={`budget-category-row ${cat.level !== 'OK' ? `budget-alert-${cat.level.toLowerCase()}` : ''}`}>
-                        <ProgressBar ratio={cat.ratio} label={`${cat.name} — ${formatCurrency(cat.spent, hideValues)} de ${formatCurrency(cat.limit, hideValues)}`} />
+                        <ProgressBar
+                            ratio={cat.hasLimit ? cat.ratio : null}
+                            label={cat.hasLimit
+                                ? `${cat.name} — ${formatCurrency(cat.spent, hideValues)} de ${formatCurrency(cat.limit, hideValues)}`
+                                : `${cat.name} — ${formatCurrency(cat.spent, hideValues)}`}
+                        />
                         <button type="button" className="btn-icon" title="Ver gastos" aria-label={`Ver gastos de ${cat.name}`}
                             onClick={() => openCategoryDetail(cat)}>
                             🔍

@@ -4,16 +4,21 @@ function levelFromRatio(ratio) {
     return 'ok';
 }
 
+// ratio === null significa "sem limite definido" (ex: categoria com
+// budget_limit 0) -- nesse caso nao da pra calcular % de nada, e mostrar
+// "0%"/barra vazia enganaria o usuario fazendo parecer que nao houve gasto
+// algum. Mostramos uma barra neutra cheia + "Sem limite" em vez de %.
 export default function ProgressBar({ ratio, label }) {
-    const clamped = Math.min(Math.max(ratio, 0), 1.5);
-    const level = levelFromRatio(ratio);
+    const unlimited = ratio == null;
+    const clamped = unlimited ? 1 : Math.min(Math.max(ratio, 0), 1.5);
+    const level = unlimited ? 'neutral' : levelFromRatio(ratio);
 
     return (
         <div className="progress-wrap">
             {label && (
                 <div className="progress-label">
                     <span>{label}</span>
-                    <span>{(ratio * 100).toFixed(0)}%</span>
+                    <span>{unlimited ? 'Sem limite' : `${(ratio * 100).toFixed(0)}%`}</span>
                 </div>
             )}
             <div className="progress-track">
