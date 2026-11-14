@@ -70,6 +70,8 @@ export default function Transactions() {
     const [recategorizing, setRecategorizing] = useState(false);
     const [recategorizeMsg, setRecategorizeMsg] = useState('');
     const [installmentPrompt, setInstallmentPrompt] = useState(null);
+    const [deletingTxn, setDeletingTxn] = useState(null);
+    const [deleting, setDeleting] = useState(false);
     const [applyingToInstallments, setApplyingToInstallments] = useState(false);
     const { hideValues } = usePrivacy();
 
@@ -155,9 +157,18 @@ export default function Transactions() {
         }
     };
 
-    const remove = async (id) => {
-        await api.delete(`/transactions/${id}`);
-        load();
+    const confirmRemove = async () => {
+        if (!deletingTxn) return;
+        setDeleting(true);
+        try {
+            await api.delete(`/transactions/${deletingTxn.id}`);
+            setDeletingTxn(null);
+            load();
+        } catch (err) {
+            setError(err.message);
+        } finally {
+            setDeleting(false);
+        }
     };
 
     const categoryName = (id) => categories.find((c) => c.id === id)?.name || '-';
@@ -360,7 +371,7 @@ export default function Transactions() {
                                                 <button className="btn-icon" title="Editar lancamento" aria-label="Editar lancamento" onClick={() => openEdit(t)}>
                                                     ✎
                                                 </button>
-                                                <button className="btn-link" onClick={() => remove(t.id)}>remover</button>
+                                                <button className="btn-link" onClick={() => setDeletingTxn(t)}>remover</button>
                                             </td>
                                         </tr>
                                     </Fragment>
@@ -459,6 +470,26 @@ export default function Transactions() {
                             </button>
                             <button type="button" className="btn-primary" disabled={applyingToInstallments} onClick={() => applyToInstallments(true)}>
                                 {applyingToInstallments ? 'Aplicando...' : 'Sim, aplicar em todas'}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {deletingTxn && (
+                <div className="modal-overlay">
+                    <div className="glass-panel edit-txn-panel">
+                        <h2>Remover lancamento?</h2>
+                        <p>
+                            Tem certeza que deseja remover <strong>{deletingTxn.description || 'este lancamento'}</strong>{' '}
+                            de {deletingTxn.date} no valor de {formatCurrency(deletingTxn.amount, hideValues)}? Essa acao nao pode ser desfeita.
+                        </p>
+                        <div className="wizard-actions">
+                            <button type="button" className="btn-link" disabled={deleting} onClick={() => setDeletingTxn(null)}>
+                                Cancelar
+                            </button>
+                            <button type="button" className="btn-primary" disabled={deleting} onClick={confirmRemove}>
+                                {deleting ? 'Removendo...' : 'Remover'}
                             </button>
                         </div>
                     </div>
